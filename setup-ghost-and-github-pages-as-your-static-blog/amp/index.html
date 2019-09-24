@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
 
-    <title>Welcome to Ghost</title>
+    <title>Setup Ghost and Github pages as your static blog</title>
 
     <meta name="HandheldFriendly" content="True">
     <meta name="viewport" content="width=device-width,minimum-scale=1,initial-scale=1">
@@ -14,31 +14,59 @@
     
     <meta property="og:site_name" content="木雅 贡嘎">
     <meta property="og:type" content="article">
-    <meta property="og:title" content="Welcome to Ghost">
-    <meta property="og:description" content="Welcome, it's great to have you here.
-We know that first impressions are important, so we've populated your new site with some initial getting started posts that will help you get familiar with everything in no time.">
-    <meta property="og:url" content="//minyakonga.github.io//welcome/">
-    <meta property="og:image" content="//minyakonga.github.io//content/images/2019/09/ghost_fav-1.jpg">
-    <meta property="article:published_time" content="2019-09-23T10:51:16.000Z">
-    <meta property="article:modified_time" content="2019-09-24T00:58:32.000Z">
-    <meta property="article:tag" content="Getting Started">
-    
+    <meta property="og:title" content="Setup Ghost and Github pages as your static blog">
+    <meta property="og:description" content="Abstract
+In this post, i will show you how to use Ghost and Github pages as your static
+blog. mainly using following tools:
+
+ * Ghost [https://ghost.org/]
+ * Buster [https://pypi.org/project/buster/]
+ * Git
+ * Github pages
+
+Background
+There are many tools which use Github pages as a static blog, like Hexo, Jekll
+etc......, due to my own reason, i like the user experience in Ghost.....
+
+Software Versions
+ * ubuntu server 18.04
+ * node 8.16.1
+ * Ghost source code 2.31.0
+ * Python buster 0.1.3
+ * G">
+    <meta property="og:url" content="//minyakonga.github.io//setup-ghost-and-github-pages-as-your-static-blog/">
+    <meta property="og:image" content="//minyakonga.github.io//content/images/2019/09/ghost_logo_big.png">
+    <meta property="article:published_time" content="2019-09-24T07:58:41.000Z">
+    <meta property="article:modified_time" content="2019-09-24T09:20:46.000Z">
     <meta property="article:publisher" content="https://www.facebook.com/ghost">
-    <meta property="article:author" content="https://www.facebook.com/ghost">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Welcome to Ghost">
-    <meta name="twitter:description" content="Welcome, it's great to have you here.
-We know that first impressions are important, so we've populated your new site with some initial getting started posts that will help you get familiar with everything in no time.">
-    <meta name="twitter:url" content="//minyakonga.github.io//welcome/">
-    <meta name="twitter:image" content="//minyakonga.github.io//content/images/2019/09/ghost_fav-1.jpg">
+    <meta name="twitter:title" content="Setup Ghost and Github pages as your static blog">
+    <meta name="twitter:description" content="Abstract
+In this post, i will show you how to use Ghost and Github pages as your static
+blog. mainly using following tools:
+
+ * Ghost [https://ghost.org/]
+ * Buster [https://pypi.org/project/buster/]
+ * Git
+ * Github pages
+
+Background
+There are many tools which use Github pages as a static blog, like Hexo, Jekll
+etc......, due to my own reason, i like the user experience in Ghost.....
+
+Software Versions
+ * ubuntu server 18.04
+ * node 8.16.1
+ * Ghost source code 2.31.0
+ * Python buster 0.1.3
+ * G">
+    <meta name="twitter:url" content="//minyakonga.github.io//setup-ghost-and-github-pages-as-your-static-blog/">
+    <meta name="twitter:image" content="//minyakonga.github.io//content/images/2019/09/ghost_logo_big.png">
     <meta name="twitter:label1" content="Written by">
-    <meta name="twitter:data1" content="Ghost">
-    <meta name="twitter:label2" content="Filed under">
-    <meta name="twitter:data2" content="Getting Started">
+    <meta name="twitter:data1" content="archer li">
     <meta name="twitter:site" content="@tryghost">
-    <meta name="twitter:creator" content="tryghost">
-    <meta property="og:image:width" content="1000">
-    <meta property="og:image:height" content="667">
+    <meta property="og:image:width" content="960">
+    <meta property="og:image:height" content="576">
     
     <script type="application/ld+json">
 {
@@ -56,32 +84,21 @@ We know that first impressions are important, so we've populated your new site w
     },
     "author": {
         "@type": "Person",
-        "name": "Ghost",
-        "image": {
-            "@type": "ImageObject",
-            "url": "https://static.ghost.org/v2.0.0/images/ghost.png",
-            "width": 400,
-            "height": 400
-        },
-        "url": "//minyakonga.github.io//author/ghost/",
-        "sameAs": [
-            "https://ghost.org",
-            "https://www.facebook.com/ghost",
-            "https://twitter.com/tryghost"
-        ]
+        "name": "archer li",
+        "url": "//minyakonga.github.io//author/archer/",
+        "sameAs": []
     },
-    "headline": "Welcome to Ghost",
-    "url": "//minyakonga.github.io//welcome/",
-    "datePublished": "2019-09-23T10:51:16.000Z",
-    "dateModified": "2019-09-24T00:58:32.000Z",
+    "headline": "Setup Ghost and Github pages as your static blog",
+    "url": "//minyakonga.github.io//setup-ghost-and-github-pages-as-your-static-blog/",
+    "datePublished": "2019-09-24T07:58:41.000Z",
+    "dateModified": "2019-09-24T09:20:46.000Z",
     "image": {
         "@type": "ImageObject",
-        "url": "//minyakonga.github.io//content/images/2019/09/ghost_fav-1.jpg",
-        "width": 1000,
-        "height": 667
+        "url": "//minyakonga.github.io//content/images/2019/09/ghost_logo_big.png",
+        "width": 960,
+        "height": 576
     },
-    "keywords": "Getting Started",
-    "description": "Welcome, it&#x27;s great to have you here.\nWe know that first impressions are important, so we&#x27;ve populated your new site with some initial getting started posts that will help you get familiar with everything in no time.",
+    "description": "Abstract\nIn this post, i will show you how to use Ghost and Github pages as your static\nblog. mainly using following tools:\n\n * Ghost [https://ghost.org/]\n * Buster [https://pypi.org/project/buster/]\n * Git\n * Github pages\n\nBackground\nThere are many tools which use Github pages as a static blog, like Hexo, Jekll\netc......, due to my own reason, i like the user experience in Ghost.....\n\nSoftware Versions\n * ubuntu server 18.04\n * node 8.16.1\n * Ghost source code 2.31.0\n * Python buster 0.1.3\n * G",
     "mainEntityOfPage": {
         "@type": "WebPage",
         "@id": "//minyakonga.github.io//"
@@ -113,18 +130,56 @@ We know that first impressions are important, so we've populated your new site w
         <article class="post">
 
             <header class="post-header">
-                <h1 class="post-title">Welcome to Ghost</h1>
+                <h1 class="post-title">Setup Ghost and Github pages as your static blog</h1>
                 <section class="post-meta">
-                    <p class="author">by <a href="../../author/ghost/index.html">Ghost</a></p>
-                    <time class="post-date" datetime="2019-09-23">2019-09-23</time>
+                    <p class="author">by <a href="../../author/archer/index.html">archer li</a></p>
+                    <time class="post-date" datetime="2019-09-24">2019-09-24</time>
                 </section>
             </header>
             <figure class="post-image">
-                <amp-img src="//minyakonga.github.io//content/images/2019/09/ghost_fav-1.jpg" width="600" height="400" layout="responsive"></amp-img>
+                <amp-img src="//minyakonga.github.io//content/images/2019/09/ghost_logo_big.png" width="600" height="400" layout="responsive"></amp-img>
             </figure>
             <section class="post-content">
 
-                <p>👋 Welcome, it's great to have you here.</p><p>We know that first impressions are important, so we've populated your new site with some initial <strong>getting started</strong> posts that will help you get familiar with everything in no time. This is the first one!</p><p><strong>A few things you should know upfront</strong>:</p><ol><li>Ghost is designed for ambitious, professional publishers who want to actively build a business around their content. That's who it works best for. </li><li>The entire platform can be modified and customised to suit your needs. It's very powerful, but does require some knowledge of code. Ghost is not necessarily a good platform for beginners or people who just want a simple personal blog. </li><li>For the best experience we recommend downloading the <a href="https://ghost.org/downloads/">Ghost Desktop App</a> for your computer, which is the best way to access your Ghost site on a desktop device. </li></ol><p>Ghost is made by an independent non-profit organisation called the Ghost Foundation. We are 100% self funded by revenue from our <a href="https://ghost.org/pricing">Ghost(Pro)</a> service, and every penny we make is re-invested into funding further development of free, open source technology for modern publishing.</p><p>The version of Ghost you are looking at right now would not have been made possible without generous contributions from the open source <a href="https://github.com/TryGhost">community</a>.</p><h2 id="next-up-the-editor">Next up, the editor</h2><p>The main thing you'll want to read about next is probably: <a href="../../the-editor/index.html">the Ghost editor</a>. This is where the good stuff happens.</p><blockquote><em>By the way, once you're done reading, you can simply delete the default <strong>Ghost</strong> user from your team to remove all of these introductory posts! </em></blockquote>
+                <h2 id="abstract">Abstract</h2><p>In this post, i will show you how to use Ghost and Github pages as your static blog. mainly using following tools:</p><ul><li><a href="https://ghost.org/">Ghost</a></li><li><a href="https://pypi.org/project/buster/">Buster</a></li><li>Git</li><li>Github pages</li></ul><h2 id="background">Background</h2><p>There are many tools which use Github pages as a static blog, like Hexo, Jekll etc......, due to my own reason, i like the user experience in Ghost.....</p><h2 id="software-versions">Software Versions</h2><ul><li>ubuntu server 18.04</li><li>node 8.16.1</li><li>Ghost source code 2.31.0</li><li>Python buster 0.1.3</li><li>Git</li></ul><h2 id="get-started">Get started</h2><h3 id="1st-change-node-version">1st, change node version</h3><pre><code class="language-bash">root@1eeb91255227:~# nvm use 8.16
+Now using node v8.16.1 (npm v6.4.1)
+</code></pre><h3 id="2nd-get-ghost-source-code">2nd, get ghost source code</h3><pre><code class="language-bash">root@1eeb91255227:~# wget https://github.com/TryGhost/Ghost/releases/download/2.31.1/Ghost-2.31.1.zip
+--2019-09-24 07:57:20--  https://github.com/TryGhost/Ghost/releases/download/2.31.1/Ghost-2.31.1.zip
+Resolving github.com (github.com)... 140.82.113.3
+...
+Connecting to github-production-release-asset-2e65be.s3.amazonaws.com (github-production-release-asset-2e65be.s3.amazonaws.com)|52.217.8.244|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 3447506 (3.3M) [application/octet-stream]
+Saving to: 'Ghost-2.31.1.zip'
+
+Ghost-2.31.1.zip                             12%[==========&gt;                                                                              ] 424.36K  21.6KB/s    eta 2m 12s</code></pre><h3 id="3rd-unzip-the-code">3rd, unzip the code</h3><pre><code class="language-bash">root@1eeb91255227:~# unzip Ghost-2.31.1.zip 
+Archive:  Ghost-2.31.1.zip
+   creating: content/
+   creating: content/adapters/
+  inflating: content/adapters/README.md
+  ...</code></pre><h3 id="4th-install-required-dependencies">4th, install required dependencies</h3><pre><code class="language-bash">root@1eeb91255227:~# npm install  
+[ .................] / fetchMetadata: sill pacote version manifest for express-hbs@2.1.2 fetched in 1309m</code></pre><h3 id="5th-start-the-ghost">5th, start the ghost</h3><pre><code class="language-bash">root@1eeb91255227:~# npm start
+
+&gt; ghost@2.31.1 start /root
+&gt; node index
+
+[2019-09-24 08:53:02] INFO Ghost is running in development...
+[2019-09-24 08:53:02] INFO Listening on: 127.0.0.1:2368
+[2019-09-24 08:53:02] INFO Url configured as: //minyakonga.github.io//
+[2019-09-24 08:53:02] INFO Ctrl+C to shut down
+[2019-09-24 08:53:02] INFO Ghost boot 2.045s</code></pre><p>now you can access the blog site in : //minyakonga.github.io//</p><figure class="kg-card kg-image-card"></figure><p>also you can access the admin page in : //minyakonga.github.io//ghost/</p><figure class="kg-card kg-image-card"></figure><h3 id="6th-install-python-buster">6th, install python buster</h3><pre><code class="language-bash">root@1eeb91255227:~# pip install buster
+Collecting buster
+  Downloading https://files.pythonhosted.org/packages/e1/71/aabfec0a7a00fd2db51f4b81baf389aa8878593588945bdf77f2bd9dca49/buster-0.1.3.tar.gz
+Collecting GitPyt...</code></pre><h3 id="7th-generate-the-static-file">7th, generate the static file</h3><pre><code class="language-bash"># first, you need create an github repo named: your-name.github.io
+
+# setup buster
+buster setup
+
+# generate static file
+buster generate --web-url=https://minyakonga.github.io/
+
+# deploy to your github pages
+buster deploy</code></pre>
 
             </section>
 
