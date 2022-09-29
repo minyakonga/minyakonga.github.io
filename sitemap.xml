@@ -1,1 +1,13 @@
-<?xml version="1.0" encoding="UTF-8"?><?xml-stylesheet type="text/xsl" href="//localhost:2368/sitemap.xsl"?><sitemapindex xmlns="//www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>//localhost:9000/sitemap-pages.xml</loc><lastmod>2019-09-24T07:28:38.689Z</lastmod></sitemap><sitemap><loc>//localhost:9000/sitemap-posts.xml</loc><lastmod>2019-09-24T09:45:20.855Z</lastmod></sitemap><sitemap><loc>//localhost:9000/sitemap-authors.xml</loc><lastmod>2019-09-24T08:55:17.152Z</lastmod></sitemap><sitemap><loc>//localhost:9000/sitemap-tags.xml</loc><lastmod>2019-09-23T10:51:07.000Z</lastmod></sitemap></sitemapindex>
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://minyakonga.github.io/about/</loc>
+         <lastmod>2022-09-29</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://minyakonga.github.io/from_binary_search_tree_to_mysql/</loc>
+         <lastmod>2022-09-29</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+</urlset>
