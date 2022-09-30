@@ -47,6 +47,10 @@
               <ul class="current">
                 <li class="toctree-l1 current"><a class="reference internal current" href="./">From Binary Search Tree To MySQL</a>
     <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#what-is-a-binary-search-tree">what is a binary search tree?</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#how-to-create-a-binary-search-tree">how to create a binary search tree?</a>
+    </li>
     </ul>
                 </li>
               </ul>
@@ -73,22 +77,160 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h3 id="background">Background</h3>
-<p>The other day i saw a online coding interview in youtube, the task is to find the inorder successor of a given node in the binary search tree. each time when i want to interview, need re-learn these knowlegdes, after i successfully found the job will forget these knowlegde sooner or later. here i want to make myself understand internal details of tree data structure and the applications. </p>
+                <h2 id="background">Background</h2>
+<p>The other day I saw an online coding interview on youtube, the task is to find the in-order successor of a given node in the binary search tree. each time when I want to interview need re-learn this knowledge, after I successfully found the job will forget this knowledge sooner or later. here I want to make myself understand the internal details of tree data structure and the applications. </p>
 <ul>
-<li>what is binary search tree?</li>
+<li>what is a binary search tree?</li>
 <li>how to create it?</li>
 <li>how to traverse it?</li>
 <li>how to search it?</li>
-<li>how to find inorder/preorder successor of a given node?</li>
+<li>how to find in order/preorder the successor of a given node?</li>
 <li>what is a balanced tree?</li>
-<li>what is red-black tree?</li>
+<li>what is a red-black tree?</li>
 <li>what is B+ tree?</li>
-<li>is there any applications in Python?</li>
+<li>are there any applications in Python?</li>
 <li>how MySQL use trees?</li>
 </ul>
-<h3 id="references">References</h3>
-<p><a href="https://www.youtube.com/results?search_query=coding+interview+bloomberg+part+1">coding interview bloomberge part 1</a></p>
+<h3 id="what-is-a-binary-search-tree">what is a binary search tree?</h3>
+<p><img alt="bst_1.png" src="../images/bst_1.png" /></p>
+<p>1, all left children are less than the current node<br />
+2, all right children are bigger than current node<br />
+3, each child itself is a binary tree<br />
+4, there is no duplicate node  </p>
+<h3 id="how-to-create-a-binary-search-tree">how to create a binary search tree?</h3>
+<p>give numbers <code>1, 3, 4, 6, 7, 8, 10, 13, 14</code>, build a binary search tree from it.</p>
+<pre><code class="language-Python">import pytest
+from demo import BinarySearchTree, CustomExceptions
+
+
+class TestBinarySearchTree:
+    @pytest.mark.asyncio
+    async def test_insert_into_binary_search_tree(self) -&gt; None:
+        &quot;&quot;&quot;test insert elements into bst
+        &quot;&quot;&quot;
+        numbers = (7, 1, 14, 3, 6, 8, 10, 4, 13)
+        self.bst = BinarySearchTree()
+
+        for number in numbers:
+            err, is_ok = await self.bst.insert(number)
+            assert err == CustomExceptions.OK
+            assert is_ok == True
+
+</code></pre>
+<pre><code class="language-Python">from typing import Union, Any
+from enum import Enum
+
+
+class CustomExceptions(Enum):
+    &quot;&quot;&quot;custom exceptions which will be used in bst
+    &quot;&quot;&quot;
+    OK = ''
+    ALREADY_EXIST = 'ALREADY_EXIST'
+    NOT_FOUND_ERROR = 'NOT_FOUND_ERROR'
+    INTERNAL_ERROR = 'INTERNAL_ERROR'
+
+
+class TreeNode:
+    &quot;&quot;&quot;tree node represented by class
+    &quot;&quot;&quot;
+    def __init__(self, value: Any, left: object=None, right: object=None) -&gt; None:
+        &quot;&quot;&quot;initialize a tree node
+
+        Args:
+            value (Any): _description_
+            left (object, optional): _description_. Defaults to None.
+            right (object, optional): _description_. Defaults to None.
+        &quot;&quot;&quot;
+        self.value = value
+        self.left = left
+        self.right = right
+
+
+class BinarySearchTree:
+    &quot;&quot;&quot;implementation of binary search tree, which support insert/delete/traverse etc
+    &quot;&quot;&quot;
+    def __init__(self) -&gt; None:
+        &quot;&quot;&quot;setting tree root node
+        &quot;&quot;&quot;
+        self.root = None
+
+    async def insert(self, value: Any) -&gt; Union[str, bool]:
+        &quot;&quot;&quot;insert value into bst, non-recursive implementation
+
+        Args:
+            node (Any): an value
+
+        Returns:
+            Union[str, bool]: err, is_ok
+        &quot;&quot;&quot;
+        # 1st, if tree not exist yet, create root node and return
+        # 2nd, if value equals current node value, return
+        # 3rd, find the leaf node to add current value into it's child
+        cursor = self.root
+
+        while cursor:
+            if cursor.value &gt; value:
+                next_cursor = cursor.left
+                if not next_cursor:
+                    cursor.left = TreeNode(value, None, None)
+                    return CustomExceptions.OK, True
+            elif cursor.value &lt; value:
+                next_cursor = cursor.right
+                if not next_cursor:
+                    cursor.right = TreeNode(value, None, None)
+                    return CustomExceptions.OK, True
+            else:
+                return CustomExceptions.ALREADY_EXIST, True
+
+            cursor = next_cursor
+        else:
+            self.root = TreeNode(value, None, None)
+            return CustomExceptions.OK, True
+
+    async def delete(self, value: Any) -&gt; Union[str, bool]:
+        &quot;&quot;&quot;delete value from tree
+
+        Args:
+            value (Any): an value
+
+        Returns:
+            Union[str, bool]: err, is_ok
+        &quot;&quot;&quot;
+        return CustomExceptions.OK, True
+
+    async def traverse(self) -&gt; Union[str, bool]:
+        &quot;&quot;&quot;traverse the tree
+
+        Returns:
+            Union[str, bool]: err, is_ok
+        &quot;&quot;&quot;
+        return CustomExceptions.OK, True
+
+    async def find_in_order_successor(self, value: Any) -&gt; Union[str, Any]:
+        &quot;&quot;&quot;in-order successor: the closest value greater than current value
+
+        Args:
+            value (Any): an value
+
+        Returns:
+            Union[str, Any]: err, Any
+        &quot;&quot;&quot;
+        return CustomExceptions.OK, True
+
+    async def find_pre_order_successor(self, value: Any) -&gt; Union[str, Any]:
+        &quot;&quot;&quot;pre-order successor: the closest value smaller than current value
+
+        Args:
+            value (Any): an value
+
+        Returns:
+            Union[str, Any]: err, Any
+        &quot;&quot;&quot;
+        return CustomExceptions.OK, True
+
+</code></pre>
+<h2 id="references">References</h2>
+<p><a href="https://www.youtube.com/results?search_query=coding+interview+bloomberg+part+1">coding interview Bloomberg part 1</a></p>
               
             </div>
           </div><footer>
