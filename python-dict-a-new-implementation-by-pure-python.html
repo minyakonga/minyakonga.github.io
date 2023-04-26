@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>夏嘉莫察瓦绒 - Python Dict: a new implementation by pure Python</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css"/>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css"/>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto+Slab|Ruda"/>
+        <link rel="stylesheet" type="text/css" href="/theme/css/main.css"/>
+
+</head>
+<body>
+<style>.github-corner:hover .octo-arm {
+    animation: octocat-wave 560ms ease-in-out
+}
+@keyframes octocat-wave {
+    0%, 100% {
+        transform: rotate(0)
+    }
+    20%, 60% {
+        transform: rotate(-25deg)
+    }
+    40%, 80% {
+        transform: rotate(10deg)
+    }
+}
+@media (max-width: 500px) {
+    .github-corner:hover .octo-arm {
+        animation: none
+    }
+
+    .github-corner .octo-arm {
+        animation: octocat-wave 560ms ease-in-out
+    }
+}</style><div id="container">
+    <header>
+        <h1><a href="/">夏嘉莫察瓦绒</a></h1>
+            <ul class="social-media">
+                    <li><a href="https://twitter.com/minyakonga"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="https://github.com/csrgxtu"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="minyakonga@gmail.com"><i class="fab fa-email fa-lg" aria-hidden="true"></i></a></li>
+            </ul>
+        <p><em>余生北国，虽闻飞鱼之名，竟不知其为何物...</em></p>
+    </header>
+    <nav>
+        <ul>
+                    <li><a                         class="active" href="/category/python.html"> Python </a></li>
+                    <li><a href="/category/readingnotes.html"> ReadingNotes </a></li>
+                    <li><a href="/category/tool.html"> tool </a></li>
+        </ul>
+    </nav>
+<main>
+    <article>
+        <h1>Python Dict: a new implementation by pure Python</h1>
+        
+        <aside>
+            <ul>
+                <li>
+                    <time datetime="2023-04-26 17:00:00+08:00">Apr 26, 2023</time>
+                </li>
+                <li> min read</li>
+                <li>
+                    Categories:
+                    <a href="/category/python.html"><em>Python</em></a>
+                </li>
+                </li>
+            </ul>
+        </aside>
+        <p>Python has a built-in implementation for <code>dict</code>, which is used to store key-value and also provided other related operations. Due to it being a frequently used basic data type, here I will use pure Python to implement a <code>dict</code>.</p>
+<h4>Hash Map</h4>
+<p>As we learned from the data structure, the hash map is a data structure that can be used to store key-value and later retrieve the value by key from it with almost constant O(1) time.</p>
+<p>A hash map uses a hash function to compute an index, also called hash code into an array of buckets or slots from which the desired value can be found.</p>
+<p>Ideally, the hash function will assign each key to a unique bucket, but most hash tables use an imperfect hash function, which might cuz hash collisions where the hash function will generate the same index for different keys.</p>
+<p>In a well-dimensioned hash map, the average cost for each look-up is constant and also allows arbitrary insertions and deletions of key-value pairs in constant time.</p>
+<p>It will have the following complexity:  </p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;"></th>
+<th style="text-align: center;">Avg</th>
+<th style="text-align: center;">Worst</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">Space</td>
+<td style="text-align: center;">O(n)</td>
+<td style="text-align: center;">O(n)</td>
+</tr>
+<tr>
+<td style="text-align: center;">Search</td>
+<td style="text-align: center;">O(1)</td>
+<td style="text-align: center;">O(n)</td>
+</tr>
+<tr>
+<td style="text-align: center;">Insert</td>
+<td style="text-align: center;">O(1)</td>
+<td style="text-align: center;">n(n)</td>
+</tr>
+<tr>
+<td style="text-align: center;">Delete</td>
+<td style="text-align: center;">O(1)</td>
+<td style="text-align: center;">O(n)</td>
+</tr>
+</tbody>
+</table>
+<p>To summarize, it will have a hash function and also need storage. when hash collisions, need to solve the collisions somehow. for more detail, read the reference.</p>
+<h4>Basic Version</h4>
+<p>So, we need to solve three things:
+- a hash function that will take the key as input and output an index
+- storage which will be used to hold the key-value pairs
+- how to solve hash collision</p>
+<p>for the first problem, we can use Python’s built-in method hash which will take input and output the index for us.</p>
+<div class="highlight"><pre><span></span><code><span class="nb">hash</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+    <span class="nb">hash</span><span class="p">(</span><span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">integer</span>
+
+    <span class="n">Return</span> <span class="n">a</span> <span class="nb">hash</span> <span class="n">value</span> <span class="k">for</span> <span class="n">the</span> <span class="nb">object</span><span class="o">.</span>  <span class="n">Two</span> <span class="n">objects</span> <span class="k">with</span> <span class="n">the</span> <span class="n">same</span> <span class="n">value</span> <span class="n">have</span>
+    <span class="n">the</span> <span class="n">same</span> <span class="nb">hash</span> <span class="n">value</span><span class="o">.</span>  <span class="n">The</span> <span class="n">reverse</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">necessarily</span> <span class="n">true</span><span class="p">,</span> <span class="n">but</span> <span class="n">likely</span><span class="o">.</span>
+</code></pre></div>
+
+<p>for the second problem, we use Python’s <code>list</code> as the storage, we store the <code>[key, value]</code> into this list. we will hash the key and get an index, using this index as the list index.</p>
+<p>for the third problem, if multiple keys hashed into the same index, we use a sub_list in <code>storage[index]</code> to chain multiple key-value pairs into that sub_list. here is an image that shows how to use chaining to solve the collision:</p>
+<p><img alt="chaining solve conflict" src="https://media.geeksforgeeks.org/wp-content/cdn-uploads/gq/2015/07/hashChaining1.png"></p>
+<p>To set key-value and get value by key like default dict <code>data_map['name'] = 'shopee'</code> <code>data_map['name']</code>, we need to implement magic methods <code>__setitem__</code> and <code>__getitem__</code>, here is the basic implementation:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># -*- coding: utf8 -*-</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">my implementation for dict</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="k">class</span> <span class="nc">Dictionary</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    implementation for dict</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">1000</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        use list as storage, each element is also a list which is used</span>
+<span class="sd">        to solve hash conflict</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">storage</span> <span class="o">=</span> <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size</span><span class="p">)]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">=</span> <span class="n">size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        set key value, if conflict, append to the sub list</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">storage_idx</span> <span class="o">=</span> <span class="nb">hash</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span>
+        <span class="k">for</span> <span class="n">ele</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">[</span><span class="n">storage_idx</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="n">ele</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>  <span class="c1"># already exist, update it</span>
+                <span class="n">ele</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+                <span class="k">break</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">[</span><span class="n">storage_idx</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        get by key, if not found, raise key error</span>
+<span class="sd">        :raise: KeyError</span>
+<span class="sd">        :return: value</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">storage_idx</span> <span class="o">=</span> <span class="nb">hash</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span>
+        <span class="k">for</span> <span class="n">ele</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">[</span><span class="n">storage_idx</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">ele</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">key</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">ele</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s1">&#39;Key </span><span class="si">{}</span><span class="s1"> dont exist&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
+</code></pre></div>
+
+<p>Here use ipython and test our <code>Dictionary</code></p>
+<div class="highlight"><pre><span></span><code>$<span class="w"> </span>ipython
+...
+
+In<span class="w"> </span><span class="o">[</span><span class="m">1</span><span class="o">]</span>:<span class="w"> </span>from<span class="w"> </span>dictionary<span class="w"> </span>import<span class="w"> </span>Dictionary
+
+In<span class="w"> </span><span class="o">[</span><span class="m">2</span><span class="o">]</span>:<span class="w"> </span><span class="nv">d</span><span class="w"> </span><span class="o">=</span><span class="w"> </span>Dictionary<span class="o">()</span>
+
+In<span class="w"> </span><span class="o">[</span><span class="m">3</span><span class="o">]</span>:<span class="w"> </span>d<span class="o">[</span><span class="s1">&#39;name&#39;</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;shopee&#39;</span>
+
+In<span class="w"> </span><span class="o">[</span><span class="m">4</span><span class="o">]</span>:<span class="w"> </span>d<span class="o">[</span><span class="s1">&#39;age&#39;</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">22</span>
+
+In<span class="w"> </span><span class="o">[</span><span class="m">5</span><span class="o">]</span>:<span class="w"> </span>d<span class="o">[</span><span class="s1">&#39;name&#39;</span><span class="o">]</span>
+Out<span class="o">[</span><span class="m">5</span><span class="o">]</span>:<span class="w"> </span><span class="s1">&#39;shopee&#39;</span>
+</code></pre></div>
+
+<p>It is workable now, but not perfect yet, like we isn't implement other operations related to <code>dict</code> yet.</p>
+<h4>More magic methods</h4>
+<p>The default dict also supports followings:
+- check if a key in current dict
+- iterate over keys
+- iterate over values
+- iterate over key-value pairs
+- delete an item by key
+- get the length of current dict
+- string representation of current dict</p>
+<p>to implement upper functionalities, we can use Python’s magic methods, for example, for iterator-related functionalities, we can use <code>__iter__</code>, for string representation functionality, we can use <code>__str__</code> or <code>__repr__</code>. for checking the key in the current dict, we can use <code>__contains__</code>. here is the detailed implementation:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># -*- coding: utf8 -*-</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">my implementation for dict</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="k">class</span> <span class="nc">Dictionary</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    implementation for dict</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="o">...</span>
+
+    <span class="k">def</span> <span class="fm">__delitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        delete key value from current dictionary instance</span>
+<span class="sd">        :param key: str</span>
+<span class="sd">        :return: None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">storage_idx</span> <span class="o">=</span> <span class="nb">hash</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span>
+        <span class="k">for</span> <span class="n">sub_lst</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">[</span><span class="n">storage_idx</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="n">sub_lst</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">[</span><span class="n">storage_idx</span><span class="p">]</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">sub_lst</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">-=</span> <span class="mi">1</span>
+                <span class="k">return</span>
+
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s1">&#39;Key </span><span class="si">{}</span><span class="s1"> dont exist&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="fm">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        check if key exist in current diction</span>
+<span class="sd">        :param key: str</span>
+<span class="sd">        :return: boolean</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">storage_idx</span> <span class="o">=</span> <span class="nb">hash</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">[</span><span class="n">storage_idx</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">key</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        return length</span>
+<span class="sd">        :return: int</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span>
+
+    <span class="k">def</span> <span class="nf">__iterate_kv</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        return an iterator</span>
+<span class="sd">        :return: generator</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">sub_lst</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">sub_lst</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">sub_lst</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">item</span>
+
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        return an iterator</span>
+<span class="sd">        :return: generator</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">key_var</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iterate_kv</span><span class="p">():</span>
+            <span class="k">yield</span> <span class="n">key_var</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        get all keys as list</span>
+<span class="sd">        :return: list</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__iter__</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">values</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        get all values as list</span>
+<span class="sd">        :return: list</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">key_var</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iterate_kv</span><span class="p">():</span>
+            <span class="k">yield</span> <span class="n">key_var</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">items</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        get all k:v as list</span>
+<span class="sd">        :return: list</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__iterate_kv</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        get value by key</span>
+<span class="sd">        :param key: str</span>
+<span class="sd">        :return: value</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        str representation of the dictionary</span>
+<span class="sd">        :return: string</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">ele</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">key_value</span> <span class="ow">in</span> <span class="n">ele</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key_value</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="n">key_str</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\&#39;</span><span class="si">{}</span><span class="se">\&#39;</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key_value</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">key_str</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key_value</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key_value</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="n">value_str</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\&#39;</span><span class="si">{}</span><span class="se">\&#39;</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key_value</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">value_str</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key_value</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+                <span class="n">res</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{}</span><span class="s1">: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key_str</span><span class="p">,</span> <span class="n">value_str</span><span class="p">))</span>
+        <span class="n">key_value_pairs_str</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">res</span><span class="p">))</span>
+        <span class="k">return</span> <span class="s1">&#39;{&#39;</span> <span class="o">+</span> <span class="n">key_value_pairs_str</span> <span class="o">+</span> <span class="s1">&#39;}&#39;</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        string representation of the class instances</span>
+<span class="sd">        :return: string</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__str__</span><span class="p">()</span>
+</code></pre></div>
+
+<p>To test it, we try to iterate the dict and check if it contains the key:</p>
+<div class="highlight"><pre><span></span><code>...
+In<span class="w"> </span><span class="o">[</span><span class="m">6</span><span class="o">]</span>:<span class="w"> </span><span class="k">for</span><span class="w"> </span>key<span class="w"> </span><span class="k">in</span><span class="w"> </span>d.keys<span class="o">()</span>:
+<span class="w">   </span>...:<span class="w">     </span>print<span class="w"> </span><span class="s1">&#39;{} : {}&#39;</span>.format<span class="o">(</span>key,<span class="w"> </span>d.get<span class="o">(</span>key<span class="o">))</span>
+<span class="w">   </span>...:
+name<span class="w"> </span>:<span class="w"> </span>shopee
+age<span class="w"> </span>:<span class="w"> </span><span class="m">22</span>
+
+In<span class="w"> </span><span class="o">[</span><span class="m">7</span><span class="o">]</span>:<span class="w"> </span>d
+Out<span class="o">[</span><span class="m">7</span><span class="o">]</span>:<span class="w"> </span><span class="o">{</span><span class="s1">&#39;name&#39;</span>:<span class="w"> </span><span class="s1">&#39;shopee&#39;</span>,<span class="w"> </span><span class="s1">&#39;age&#39;</span>:<span class="w"> </span><span class="m">22</span><span class="o">}</span>
+
+In<span class="w"> </span><span class="o">[</span><span class="m">8</span><span class="o">]</span>:<span class="w"> </span><span class="s1">&#39;name&#39;</span><span class="w"> </span><span class="k">in</span><span class="w"> </span>d
+Out<span class="o">[</span><span class="m">8</span><span class="o">]</span>:<span class="w"> </span>True
+</code></pre></div>
+
+<h4>Summary</h4>
+<p>So, this is just a simple implementation of Python dict by using Python’s list and hash built-ins. To extend, you can also implement clean, update etc. I am also curious about how to replace the default dict in CPython with my implementation.</p>
+<h4>Reference</h4>
+<p><a href="https://en.wikipedia.org/wiki/Hash_table">Hash Table</a><br>
+<a href="https://www.laurentluce.com/posts/python-dictionary-implementation/">Python dictionary implementation</a><br>
+<a href="https://github.com/python/cpython/blob/master/Objects/dictobject.c">CPython dictobject.c</a><br>
+<a href="https://old-panda.com/2018/12/16/python-magic-methods/">Python magic methods</a>  </p>
+    </article>
+    <section class="post-nav">
+        <div id="left-page">
+            <div id="left-link">
+            </div>
+        </div>
+        <div id="right-page">
+            <div id="right-link">
+                <a href="/pelican-static-site-generator-tutorial.html">Pelican static site generator tutorial </a>
+                <div id="right-arrow"><i class="fa fa-chevron-circle-right"></i></div>
+            </div>
+        </div>
+    </section>
+    <div>
+        <script src="https://giscus.app/client.js" data-repo="minyakonga/minyakonga.github.io"
+            data-repo-id="MDEwOlJlcG9zaXRvcnkyMTAzMDc1NTc=" data-category="General"
+            data-category-id="DIC_kwDODIkJ5c4CUaQB" data-mapping="pathname" data-strict="0" data-reactions-enabled="1"
+            data-emit-metadata="0" data-input-position="bottom" data-theme="light" data-lang="en"
+            crossorigin="anonymous" async>
+            </script>
+    </div>
+</main>
+    <footer>
+        <h6>
+            Rendered by <a href="http://getpelican.com/">Pelican</a> &nbsp;&bull;&nbsp; Theme by <a
+                href="https://github.com/aleylara/Peli-Kiera">Peli-Kiera</a> &nbsp;&bull;&nbsp; Copyright
+                &copy &nbsp;&#8209;&nbsp; minyakonga         </h6>
+    </footer>
+</div>
+</body>
+</html>
