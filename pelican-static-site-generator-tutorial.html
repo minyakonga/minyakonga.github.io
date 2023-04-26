@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>夏嘉莫察瓦绒 - Pelican static site generator tutorial</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css"/>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css"/>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto+Slab|Ruda"/>
+        <link rel="stylesheet" type="text/css" href="/theme/css/main.css"/>
+
+</head>
+<body>
+<style>.github-corner:hover .octo-arm {
+    animation: octocat-wave 560ms ease-in-out
+}
+@keyframes octocat-wave {
+    0%, 100% {
+        transform: rotate(0)
+    }
+    20%, 60% {
+        transform: rotate(-25deg)
+    }
+    40%, 80% {
+        transform: rotate(10deg)
+    }
+}
+@media (max-width: 500px) {
+    .github-corner:hover .octo-arm {
+        animation: none
+    }
+
+    .github-corner .octo-arm {
+        animation: octocat-wave 560ms ease-in-out
+    }
+}</style><div id="container">
+    <header>
+        <h1><a href="/">夏嘉莫察瓦绒</a></h1>
+            <ul class="social-media">
+                    <li><a href="https://twitter.com/minyakonga"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="https://github.com/csrgxtu"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="minyakonga@gmail.com"><i class="fab fa-email fa-lg" aria-hidden="true"></i></a></li>
+            </ul>
+        <p><em>余生北国，虽闻飞鱼之名，竟不知其为何物...</em></p>
+    </header>
+    <nav>
+        <ul>
+                    <li><a href="/category/readingnotes.html"> ReadingNotes </a></li>
+                    <li><a                         class="active" href="/category/tool.html"> tool </a></li>
+        </ul>
+    </nav>
+<main>
+    <article>
+        <h1>Pelican static site generator tutorial</h1>
+        
+        <aside>
+            <ul>
+                <li>
+                    <time datetime="2023-04-26 16:00:00+08:00">Apr 26, 2023</time>
+                </li>
+                <li> min read</li>
+                <li>
+                    Categories:
+                    <a href="/category/tool.html"><em>tool</em></a>
+                </li>
+                </li>
+            </ul>
+        </aside>
+        <p>I am Pythonista, thus wired still using Node Hexo as a static site generator. and due to the lost source code of csrgxtu.github.io, decided to migrate to Pelican as my blog static site generator. this post is used to record some key steps to use Pelican in my new blog site minyakonga.github.io.</p>
+<p>1st, prepare the Python environment</p>
+<div class="highlight"><pre><span></span><code>pyenv<span class="w"> </span>virtualenv<span class="w"> </span><span class="m">3</span>.11.2<span class="w"> </span>minyakonga-blog
+</code></pre></div>
+
+<p>2nd, install dependency packages</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;pelican[markdown]&quot;</span>
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>pelican-readtime
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>pelican-neighbors
+</code></pre></div>
+
+<p>3rd, write a post in markdown and save it into <code>content</code> dir</p>
+<div class="highlight"><pre><span></span><code>.
+├──<span class="w"> </span>Makefile
+├──<span class="w"> </span>__pycache__
+│<span class="w">   </span>└──<span class="w"> </span>pelicanconf.cpython-311.pyc
+├──<span class="w"> </span>content
+│<span class="w">   </span>├──<span class="w"> </span>extras
+│<span class="w">   </span>│<span class="w">   </span>└──<span class="w"> </span>favicon.ico
+│<span class="w">   </span>├──<span class="w"> </span>images
+│<span class="w">   </span>│<span class="w">   </span>└──<span class="w"> </span>douban-a-philosophy-of-software-design.jpg
+│<span class="w">   </span>├──<span class="w"> </span>pelican-static-site-generator-tutorial.md
+│<span class="w">   </span>└──<span class="w"> </span>reading-notes-philosophy-of-software-design.md
+...
+</code></pre></div>
+
+<p>4th, start the local dev server and check the rendered page on your browser</p>
+<div class="highlight"><pre><span></span><code>pelican<span class="w"> </span>--autoreload<span class="w"> </span>--listen<span class="w">  </span><span class="c1"># http://localhost:8000</span>
+</code></pre></div>
+
+<p>5th, generate static content</p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>git@github.com:minyakonga/minyakonga.github.io.git<span class="w">  </span><span class="c1"># clone this static repo into current project root</span>
+
+pelican<span class="w"> </span>content<span class="w"> </span>-o<span class="w"> </span>minyakonga.github.io<span class="w"> </span>-s<span class="w"> </span>pelicanconf.py<span class="w">  </span><span class="c1"># generate static into minyakonga.github.io</span>
+</code></pre></div>
+    </article>
+    <section class="post-nav">
+        <div id="left-page">
+            <div id="left-link">
+            </div>
+        </div>
+        <div id="right-page">
+            <div id="right-link">
+                <a href="/reading-notes-philosophy-of-software-design.html">Reading Notes -- Philosophy of software design </a>
+                <div id="right-arrow"><i class="fa fa-chevron-circle-right"></i></div>
+            </div>
+        </div>
+    </section>
+    <div>
+        <script src="https://giscus.app/client.js" data-repo="minyakonga/minyakonga.github.io"
+            data-repo-id="MDEwOlJlcG9zaXRvcnkyMTAzMDc1NTc=" data-category="General"
+            data-category-id="DIC_kwDODIkJ5c4CUaQB" data-mapping="pathname" data-strict="0" data-reactions-enabled="1"
+            data-emit-metadata="0" data-input-position="bottom" data-theme="light" data-lang="en"
+            crossorigin="anonymous" async>
+            </script>
+    </div>
+</main>
+    <footer>
+        <h6>
+            Rendered by <a href="http://getpelican.com/">Pelican</a> &nbsp;&bull;&nbsp; Theme by <a
+                href="https://github.com/aleylara/Peli-Kiera">Peli-Kiera</a> &nbsp;&bull;&nbsp; Copyright
+                &copy &nbsp;&#8209;&nbsp; minyakonga         </h6>
+    </footer>
+</div>
+</body>
+</html>
