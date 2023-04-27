@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>夏嘉莫察瓦绒 - Gunicorn, an inside view of it</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css"/>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css"/>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto+Slab|Ruda"/>
+        <link rel="stylesheet" type="text/css" href="/theme/css/main.css"/>
+
+</head>
+<body>
+<style>.github-corner:hover .octo-arm {
+    animation: octocat-wave 560ms ease-in-out
+}
+@keyframes octocat-wave {
+    0%, 100% {
+        transform: rotate(0)
+    }
+    20%, 60% {
+        transform: rotate(-25deg)
+    }
+    40%, 80% {
+        transform: rotate(10deg)
+    }
+}
+@media (max-width: 500px) {
+    .github-corner:hover .octo-arm {
+        animation: none
+    }
+
+    .github-corner .octo-arm {
+        animation: octocat-wave 560ms ease-in-out
+    }
+}</style><div id="container">
+    <header>
+        <h1><a href="/">夏嘉莫察瓦绒</a></h1>
+            <ul class="social-media">
+                    <li><a href="https://twitter.com/minyakonga"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="https://github.com/csrgxtu"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="minyakonga@gmail.com"><i class="fab fa-email fa-lg" aria-hidden="true"></i></a></li>
+            </ul>
+        <p><em>余生北国，虽闻飞鱼之名，竟不知其为何物...</em></p>
+    </header>
+    <nav>
+        <ul>
+                    <li><a                         class="active" href="/category/python.html"> Python </a></li>
+                    <li><a href="/category/readingnotes.html"> ReadingNotes </a></li>
+                    <li><a href="/category/tool.html"> tool </a></li>
+        </ul>
+    </nav>
+<main>
+    <article>
+        <h1>Gunicorn, an inside view of it</h1>
+        
+        <aside>
+            <ul>
+                <li>
+                    <time datetime="2023-04-27 14:00:00+08:00">Apr 27, 2023</time>
+                </li>
+                <li> min read</li>
+                <li>
+                    Categories:
+                    <a href="/category/python.html"><em>Python</em></a>
+                </li>
+                </li>
+            </ul>
+        </aside>
+        <p>Gunicorn 是一个Python Web Server实现，兼容WSGI协议。其迁移自Ruby世界的Unicorn。在我们的生产环境中，有大量使用Gunicorn作为Web 服务器，所以本文分析Gunicorn的相关几个问题： Server model，Async worker.</p>
+<h3>Server model</h3>
+<p>如果你写过socket编程，应该知道socket server一般是如何支持并发的，比如在socket server启动后，会对每一个进来的请求fork一个新的进程或者线程去处理它。但是这种实现存在问题，比如高并发量情况下，socket server不得不创建很多进程或者线程，创建进程或者线程需要sys call，大量的创建或者销毁会使系统负载过高，进而处理请求能力下降。极限情况是可以创建的进程线程数量会达到OS的limit进而程序崩溃，或者大量的进程线程之间切换耗费太多资源（我们知道OS 进程管理器在做switch操作的时候，需要保存当前进程的状态到内存数据结构中，然后将ready的进程相关资源load进入相关处理器）。</p>
+<p>一种改进的方案是池化复用。创建固定数量的进程或者线程，所有并发进来的请求都轮流使用池子中的进程线程处理。这种情况下，进程线程只会创建一次，后续会被请求复用，在整个服务器生命周期的最后阶段才会被销毁。这种优化思想在工程中的很多地方都有使用，比如Web app到数据库会有一个连接池，Django celery模型中会使用消息队列池化待处理的任务等等。</p>
+<p>如果大部分请求处理涉及IO，那么更加优化的方案是通过OS提供的IO复用机制（select/poll/epoll）来处理。在一个服务主循环中，IO multiplexing会返回当前可读可写的socket，这样就可以直接使用对应handler处理方法处理read、write ready的socket。这种方式的优点是单进程即可支持很高的并发量，且没有进程创建销毁等操作，资源占用率比较低。但是它一定是处理IO bound task才会有这种优势。</p>
+<p>Gunicorn 采用的是池化复用的技巧，通过服务启动时候，根据你的配置信息，由master进程提前创建好对应的worker进程，然后后续的请求都会通过轮流复用被这些worker进程处理。从单个sync worker进程的视角来看，在某一个时刻，其只能处理一个请求，其它请求要么被其它worker处理中，要么在socket队列pending中。下面是一张其逻辑视图：</p>
+<p><img alt="gunicorn server model" src="https://www.spirulasystems.com/wp-content/plugins/phastpress/phast.php?service=images&amp;width=512&amp;height=290&amp;src=https%3A%2F%2Fwww.spirulasystems.com%2Fwp-content%2Fuploads%2F2015%2F01%2Fsync_worker_type1.png&amp;cacheMarker=1557312233-22541&amp;token=a271e359b84a7e6c"></p>
+<p>总体上，master进程负责启动worker进程并对其管理，包括创建、销毁、新增、减少等操作。worker进程负责监听端口处理请求，其创建启动的时候，会实例化配置好的Python Web application，将接受的http 请求parse，然后调用web application处理，得到返回结果后整理成Http Response通过tcp返回给客户端。如下图：</p>
+<p><img alt="gunicorn process model" src="https://circus.readthedocs.org/en/0.5/_images/classical-stack.png"></p>
+<h3>Source code analysis</h3>
+<p>The following code in Gunicorn shows how it starts a master and workers process. when you type the following command in bash: <code>gunicorn -w 4 myapp:app</code>, gunicorn will enter Arbiter.run method, it first starts the master by initializing arbiter class instance, like set <code>pid</code> and creates socket. it then will create a worker process with <code>Arbiter.spawn_worker</code>, actually uses <code>os.fork</code> to create or clone a child process. Also in Arbiter.manage_workers you can see how master process manages worker process.</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">Arbiter</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Arbiter maintain the workers processes alive. It launches or</span>
+<span class="sd">    kills them if needed. It also manages application reloading</span>
+<span class="sd">    via SIGHUP/USR2.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="o">...</span>
+
+    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s2">&quot;Main master loop.&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="n">util</span><span class="o">.</span><span class="n">_setproctitle</span><span class="p">(</span><span class="s2">&quot;master [</span><span class="si">%s</span><span class="s2">]&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">proc_name</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">manage_workers</span><span class="p">()</span>
+
+            <span class="o">...</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Unhandled exception in main loop&quot;</span><span class="p">,</span>
+                          <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">stop</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pidfile</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pidfile</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
+            <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;\</span>
+<span class="sd">        Initialize the arbiter. Start listening and set pidfile if needed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">init_signals</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">LISTENERS</span><span class="p">:</span>
+            <span class="n">fds</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">listen_fds</span> <span class="o">=</span> <span class="n">systemd</span><span class="o">.</span><span class="n">listen_fds</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">listen_fds</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">systemd</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">fds</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">systemd</span><span class="o">.</span><span class="n">SD_LISTEN_FDS_START</span><span class="p">,</span>
+                            <span class="n">systemd</span><span class="o">.</span><span class="n">SD_LISTEN_FDS_START</span> <span class="o">+</span> <span class="n">listen_fds</span><span class="p">)</span>
+
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">master_pid</span><span class="p">:</span>
+                <span class="n">fds</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">fd</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;GUNICORN_FD&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">):</span>
+                    <span class="n">fds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">fd</span><span class="p">))</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">LISTENERS</span> <span class="o">=</span> <span class="n">sock</span><span class="o">.</span><span class="n">create_sockets</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">,</span> <span class="n">fds</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">manage_workers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;\</span>
+<span class="sd">        Maintain the number of workers by spawning or killing</span>
+<span class="sd">        as required.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">WORKERS</span><span class="p">)</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">spawn_workers</span><span class="p">()</span>
+
+        <span class="n">workers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">WORKERS</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="n">workers</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">workers</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">w</span><span class="p">:</span> <span class="n">w</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">age</span><span class="p">)</span>
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">workers</span><span class="p">)</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">:</span>
+            <span class="p">(</span><span class="n">pid</span><span class="p">,</span> <span class="n">_</span><span class="p">)</span> <span class="o">=</span> <span class="n">workers</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">kill_worker</span><span class="p">(</span><span class="n">pid</span><span class="p">,</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIGTERM</span><span class="p">)</span>
+
+        <span class="n">active_worker_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">workers</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_logged_active_worker_count</span> <span class="o">!=</span> <span class="n">active_worker_count</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_last_logged_active_worker_count</span> <span class="o">=</span> <span class="n">active_worker_count</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{0}</span><span class="s2"> workers&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">active_worker_count</span><span class="p">),</span>
+                           <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;metric&quot;</span><span class="p">:</span> <span class="s2">&quot;gunicorn.workers&quot;</span><span class="p">,</span>
+                                  <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">active_worker_count</span><span class="p">,</span>
+                                  <span class="s2">&quot;mtype&quot;</span><span class="p">:</span> <span class="s2">&quot;gauge&quot;</span><span class="p">})</span>
+
+    <span class="k">def</span> <span class="nf">spawn_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">worker_age</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">worker</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_class</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">worker_age</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">LISTENERS</span><span class="p">,</span>
+                                   <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span>
+                                   <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">pre_fork</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker</span><span class="p">)</span>
+        <span class="n">pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">fork</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">pid</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">worker</span><span class="o">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">WORKERS</span><span class="p">[</span><span class="n">pid</span><span class="p">]</span> <span class="o">=</span> <span class="n">worker</span>
+            <span class="k">return</span> <span class="n">pid</span>
+
+        <span class="c1"># Do not inherit the temporary files of other workers</span>
+        <span class="k">for</span> <span class="n">sibling</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">WORKERS</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">sibling</span><span class="o">.</span><span class="n">tmp</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+        <span class="c1"># Process Child</span>
+        <span class="n">worker</span><span class="o">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">util</span><span class="o">.</span><span class="n">_setproctitle</span><span class="p">(</span><span class="s2">&quot;worker [</span><span class="si">%s</span><span class="s2">]&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">proc_name</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Booting worker with pid: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">worker</span><span class="o">.</span><span class="n">pid</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">post_fork</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker</span><span class="p">)</span>
+            <span class="n">worker</span><span class="o">.</span><span class="n">init_process</span><span class="p">()</span>
+            <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">SystemExit</span><span class="p">:</span>
+            <span class="k">raise</span>
+        <span class="k">except</span> <span class="n">AppImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Exception while loading the application&quot;</span><span class="p">,</span>
+                           <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">e</span><span class="p">,</span> <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
+            <span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+            <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">APP_LOAD_ERROR</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Exception in worker process&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">worker</span><span class="o">.</span><span class="n">booted</span><span class="p">:</span>
+                <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">WORKER_BOOT_ERROR</span><span class="p">)</span>
+            <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Worker exiting (pid: </span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">worker</span><span class="o">.</span><span class="n">pid</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">worker</span><span class="o">.</span><span class="n">tmp</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">worker_exit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Exception during worker exit:</span><span class="se">\n</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                                 <span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">())</span>
+</code></pre></div>
+
+<h3>Async worker type</h3>
+<p>Gunicorn支持多种worker type，例如Sync，Async，Tonardo，AsyncIO类型的worker。Sync的worker最简单，在上节已经阐述。</p>
+<p>Async worker是通过Gevent or Eventlet实现，Gevent &amp; Eventlet都是通过Greenlet实现， Greenlet是Python的一个C extension module，其本质是C的co-routine。总体上来说Gevent就是通过co-routine + 事件循环（libev）实现了异步模型。如果对这里的实现特别感兴趣，推荐看David beezly的<a href="https://www.youtube.com/watch?v=Z_OAlIhXziw">curious course on corontines and concurrency</a> and Kavya Joshi的 <a href="https://www.youtube.com/watch?v=GunMToxbE0E">a deep dive into how gevent works</a></p>
+<p>Async模式下Gunicorn处理请求的流程图如下：
+<img alt="async gunicorn" src="https://www.spirulasystems.com/wp-content/plugins/phastpress/phast.php?service=images&amp;width=275&amp;height=300&amp;src=https%3A%2F%2Fwww.spirulasystems.com%2Fwp-content%2Fuploads%2F2015%2F01%2Fsync_worker_type2-275x300.png&amp;cacheMarker=1557312233-55428&amp;token=c96103d27e004eef"></p>
+<p>一个async worker可以并发的处理很多个请求，每个请求实际上被一个coroutine处理，当其进入IO等待，会主动yield出控制权，这样下一个coroutine就可以执行。当IO ready，会触发事件，事件循环会将对应的coroutine的从yeild出控制权的地方恢复执行。</p>
+<p>Async worker的corotines会运行在一个进程中，通过来回切换函数来充分利用CPU，减少IO等待时间，其在某个时刻只会有一个routine在cpu上运行。相比于进程线程，coroutine更加轻量，因为其操作的维度是函数而不是整个进程线程。</p>
+<p>Gunicorn has a base worker type for every support worker, that is <code>base.Wrorker</code>, from the def of it, you can see child workers must implement <code>run init_process</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># base.py</span>
+<span class="k">class</span> <span class="nc">Worker</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">age</span><span class="p">,</span> <span class="n">ppid</span><span class="p">,</span> <span class="n">sockets</span><span class="p">,</span> <span class="n">app</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">log</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; called in pre-fork &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span> <span class="nf">notify</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; inform master process that this worker is alive &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;\</span>
+<span class="sd">        This is the mainloop of a worker process. You should override</span>
+<span class="sd">        this method in a subclass to provide the intended behaviour</span>
+<span class="sd">        for your particular evil schemes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">init_process</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;\</span>
+<span class="sd">        If you override this method in a subclass, the last statement</span>
+<span class="sd">        in the function should be to call this method with</span>
+<span class="sd">        super().init_process() so that the ``run()`` loop is initiated.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wait_fds</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sockets</span> <span class="o">+</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">PIPE</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">close_on_exec</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">init_signals</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">load_wsgi</span><span class="p">()</span>
+        <span class="o">...</span>
+        <span class="c1"># Enter main run loop</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">booted</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</code></pre></div>
+
+<p>but for async workers, it will have a second parent base type which is <code>base_async.AsyncWorker</code>, which is inherit from <code>base.Worker</code>.
+it mainly defines how to process or handle the request. And also Gunicorn has the corresponding SyncWorker defined in <code>sync.py</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># base_async.py</span>
+
+<span class="k">class</span> <span class="nc">AsyncWorker</span><span class="p">(</span><span class="n">base</span><span class="o">.</span><span class="n">Worker</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">handle</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">listener</span><span class="p">,</span> <span class="n">client</span><span class="p">,</span> <span class="n">addr</span><span class="p">):</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">parser</span> <span class="o">=</span> <span class="n">http</span><span class="o">.</span><span class="n">RequestParser</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="p">,</span> <span class="n">client</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">listener_name</span> <span class="o">=</span> <span class="n">listener</span><span class="o">.</span><span class="n">getsockname</span><span class="p">()</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">keepalive</span><span class="p">:</span>
+                    <span class="n">req</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">parser</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">handle_request</span><span class="p">(</span><span class="n">listener_name</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">client</span><span class="p">,</span> <span class="n">addr</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="o">...</span>
+
+    <span class="k">def</span> <span class="nf">handle_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">listener_name</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">sock</span><span class="p">,</span> <span class="n">addr</span><span class="p">):</span>
+        <span class="n">request_start</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+        <span class="n">environ</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">resp</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">pre_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">)</span>
+            <span class="n">resp</span><span class="p">,</span> <span class="n">environ</span> <span class="o">=</span> <span class="n">wsgi</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">sock</span><span class="p">,</span> <span class="n">addr</span><span class="p">,</span>
+                                        <span class="n">listener_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="p">)</span>
+            <span class="n">environ</span><span class="p">[</span><span class="s2">&quot;wsgi.multithread&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="o">...</span>
+</code></pre></div>
+
+<p>Gevent worker implementation is defined in <code>ggevent.py</code>, which will implement the following methods: <code>run, init_process, notify</code></p>
+<div class="highlight"><pre><span></span><code><span class="c1"># ggevent.py</span>
+<span class="k">class</span> <span class="nc">GeventWorker</span><span class="p">(</span><span class="n">AsyncWorker</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">notify</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">notify</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ppid</span> <span class="o">!=</span> <span class="n">os</span><span class="o">.</span><span class="n">getppid</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Parent changed, shutting down: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+            <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">init_process</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">patch</span><span class="p">()</span>
+        <span class="n">hub</span><span class="o">.</span><span class="n">reinit</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">init_process</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">servers</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">ssl_args</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">is_ssl</span><span class="p">:</span>
+            <span class="n">ssl_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">server_side</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">ssl_options</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sockets</span><span class="p">:</span>
+            <span class="n">s</span><span class="o">.</span><span class="n">setblocking</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">pool</span> <span class="o">=</span> <span class="n">Pool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">worker_connections</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_class</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">environ</span> <span class="o">=</span> <span class="n">base_environ</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="p">)</span>
+                <span class="n">environ</span><span class="o">.</span><span class="n">update</span><span class="p">({</span>
+                    <span class="s2">&quot;wsgi.multithread&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;SERVER_SOFTWARE&quot;</span><span class="p">:</span> <span class="n">VERSION</span><span class="p">,</span>
+                <span class="p">})</span>
+                <span class="n">server</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_class</span><span class="p">(</span>
+                    <span class="n">s</span><span class="p">,</span> <span class="n">application</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">wsgi</span><span class="p">,</span> <span class="n">spawn</span><span class="o">=</span><span class="n">pool</span><span class="p">,</span> <span class="n">log</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">,</span>
+                    <span class="n">handler_class</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">wsgi_handler</span><span class="p">,</span> <span class="n">environ</span><span class="o">=</span><span class="n">environ</span><span class="p">,</span>
+                    <span class="o">**</span><span class="n">ssl_args</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">hfun</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span>
+                <span class="n">server</span> <span class="o">=</span> <span class="n">StreamServer</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">handle</span><span class="o">=</span><span class="n">hfun</span><span class="p">,</span> <span class="n">spawn</span><span class="o">=</span><span class="n">pool</span><span class="p">,</span> <span class="o">**</span><span class="n">ssl_args</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">workers</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">server</span><span class="o">.</span><span class="n">max_accept</span> <span class="o">=</span> <span class="mi">1</span>
+
+            <span class="n">server</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="n">servers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">server</span><span class="p">)</span>
+
+        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">alive</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">notify</span><span class="p">()</span>
+            <span class="n">gevent</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Stop accepting requests</span>
+            <span class="k">for</span> <span class="n">server</span> <span class="ow">in</span> <span class="n">servers</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">server</span><span class="p">,</span> <span class="s1">&#39;close&#39;</span><span class="p">):</span>  <span class="c1"># gevent 1.0</span>
+                    <span class="n">server</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">server</span><span class="p">,</span> <span class="s1">&#39;kill&#39;</span><span class="p">):</span>  <span class="c1"># gevent &lt; 1.0</span>
+                    <span class="n">server</span><span class="o">.</span><span class="n">kill</span><span class="p">()</span>
+
+            <span class="c1"># Handle current requests until graceful_timeout</span>
+            <span class="n">ts</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+            <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">ts</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">graceful_timeout</span><span class="p">:</span>
+                <span class="n">accepting</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="k">for</span> <span class="n">server</span> <span class="ow">in</span> <span class="n">servers</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">server</span><span class="o">.</span><span class="n">pool</span><span class="o">.</span><span class="n">free_count</span><span class="p">()</span> <span class="o">!=</span> <span class="n">server</span><span class="o">.</span><span class="n">pool</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+                        <span class="n">accepting</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                <span class="c1"># if no server is accepting a connection, we can exit</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">accepting</span><span class="p">:</span>
+                    <span class="k">return</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">notify</span><span class="p">()</span>
+                <span class="n">gevent</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+
+            <span class="c1"># Force kill all active the handlers</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Worker graceful timeout (pid:</span><span class="si">%s</span><span class="s2">)&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">pid</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">server</span> <span class="ow">in</span> <span class="n">servers</span><span class="p">:</span>
+                <span class="n">server</span><span class="o">.</span><span class="n">stop</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+</code></pre></div>
+
+<h3>总结</h3>
+<p>一般来说我们的web application要query db，从第三方api拉取数据等，所以很大概率上这是一个IO bound的task，这就比较适合用Gunicorn的Async worker（gevent）来处理。如果你的服务是一个CPU bound的task，那么用Gunicorn的Sync task就会达到很好的性能。</p>
+<h3>Reference</h3>
+<p><a href="https://www.youtube.com/watch?v=GunMToxbE0E">A deep dive into how gevent works</a><br>
+<a href="https://www.spirulasystems.com/blog/2015/01/20/gunicorn-worker-types/">Gunicorn worker types</a><br>
+<a href="https://words.volant.is/articles/understanding-gunicorns-async-worker-concurrency-model/">Understand Gunicorn's async worker models</a><br>
+<a href="https://github.com/benoitc/gunicorn">benoitc/gunicorn</a><br>
+<a href="https://docs.gunicorn.org/en/stable/design.html">Gunicorn Design</a><br>
+<a href="https://www.youtube.com/watch?v=Z_OAlIhXziw">Curious course on coroutines and concurrency</a>  </p>
+    </article>
+    <section class="post-nav">
+        <div id="left-page">
+            <div id="left-link">
+            </div>
+        </div>
+        <div id="right-page">
+            <div id="right-link">
+                <a href="/gevent-patch-it-and-pray.html">Gevent: Patch it and pray </a>
+                <div id="right-arrow"><i class="fa fa-chevron-circle-right"></i></div>
+            </div>
+        </div>
+    </section>
+    <div>
+        <script src="https://giscus.app/client.js" data-repo="minyakonga/minyakonga.github.io"
+            data-repo-id="MDEwOlJlcG9zaXRvcnkyMTAzMDc1NTc=" data-category="General"
+            data-category-id="DIC_kwDODIkJ5c4CUaQB" data-mapping="pathname" data-strict="0" data-reactions-enabled="1"
+            data-emit-metadata="0" data-input-position="bottom" data-theme="light" data-lang="en"
+            crossorigin="anonymous" async>
+            </script>
+    </div>
+</main>
+    <footer>
+        <h6>
+            Rendered by <a href="http://getpelican.com/">Pelican</a> &nbsp;&bull;&nbsp; Theme by <a
+                href="https://github.com/aleylara/Peli-Kiera">Peli-Kiera</a> &nbsp;&bull;&nbsp; Copyright
+                &copy &nbsp;&#8209;&nbsp; minyakonga         </h6>
+    </footer>
+</div>
+</body>
+</html>
