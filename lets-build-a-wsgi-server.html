@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>夏嘉莫察瓦绒 - Let's build a WSGI server</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css"/>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css"/>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto+Slab|Ruda"/>
+        <link rel="stylesheet" type="text/css" href="/theme/css/main.css"/>
+
+</head>
+<body>
+<style>.github-corner:hover .octo-arm {
+    animation: octocat-wave 560ms ease-in-out
+}
+@keyframes octocat-wave {
+    0%, 100% {
+        transform: rotate(0)
+    }
+    20%, 60% {
+        transform: rotate(-25deg)
+    }
+    40%, 80% {
+        transform: rotate(10deg)
+    }
+}
+@media (max-width: 500px) {
+    .github-corner:hover .octo-arm {
+        animation: none
+    }
+
+    .github-corner .octo-arm {
+        animation: octocat-wave 560ms ease-in-out
+    }
+}</style><div id="container">
+    <header>
+        <h1><a href="/">夏嘉莫察瓦绒</a></h1>
+            <ul class="social-media">
+                    <li><a href="https://twitter.com/minyakonga"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="https://github.com/csrgxtu"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="minyakonga@gmail.com"><i class="fab fa-email fa-lg" aria-hidden="true"></i></a></li>
+            </ul>
+        <p><em>余生北国，虽闻飞鱼之名，竟不知其为何物...</em></p>
+    </header>
+    <nav>
+        <ul>
+                    <li><a                         class="active" href="/category/python.html"> Python </a></li>
+                    <li><a href="/category/readingnotes.html"> ReadingNotes </a></li>
+                    <li><a href="/category/tool.html"> tool </a></li>
+        </ul>
+    </nav>
+<main>
+    <article>
+        <h1>Let's build a WSGI server</h1>
+        
+        <aside>
+            <ul>
+                <li>
+                    <time datetime="2023-04-27 16:00:00+08:00">Apr 27, 2023</time>
+                </li>
+                <li> min read</li>
+                <li>
+                    Categories:
+                    <a href="/category/python.html"><em>Python</em></a>
+                </li>
+                </li>
+            </ul>
+        </aside>
+        <p>Let’s build a WSGI server ground up with sockets, multi-processing or Select/Poll/Epoll. to achieve this, you need familiar with Python’s socket programming, Python’s concurrency model, and Linux's Non-blocking I/O.</p>
+<p>WSGI(web server gateway interface) is a protocol in Python web programming, it defines how web applications and web servers communicate. with this protocol, you can choose various combinations of web servers and web frameworks that are WSGI compatible. for example, you can use Gunicorn + Django, or even Bjoern + Flask etc…</p>
+<h3>What's WSGI Server</h3>
+<p>WSGI server is the server-side WSGI protocol implementation. which is responsible for accepting connections and invoking web applications to process the result through WSGI protocol, and finally return the results to clients. with WSGI server concentrating on accepting connections, WSGI framework(application) can focus on your business logic.</p>
+<p>To summarize, as a WSGI server, it must contain the following info:</p>
+<ul>
+<li>compose env variables which will be used in the web framework</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;wsgi.input&#39;</span><span class="p">]</span>        <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">stdin</span>
+<span class="n">environ</span><span class="p">[</span><span class="s1">&#39;wsgi.errors&#39;</span><span class="p">]</span>       <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">stderr</span>
+<span class="n">environ</span><span class="p">[</span><span class="s1">&#39;wsgi.version&#39;</span><span class="p">]</span>      <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="n">environ</span><span class="p">[</span><span class="s1">&#39;wsgi.multithread&#39;</span><span class="p">]</span>  <span class="o">=</span> <span class="kc">False</span>
+<span class="n">environ</span><span class="p">[</span><span class="s1">&#39;wsgi.multiprocess&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">environ</span><span class="p">[</span><span class="s1">&#39;wsgi.run_once&#39;</span><span class="p">]</span>     <span class="o">=</span> <span class="kc">True</span>
+<span class="n">environ</span><span class="p">[</span><span class="s1">&#39;wsgi.url_schema&#39;</span><span class="p">]</span>   <span class="o">=</span> <span class="s1">&#39;http&#39;</span>
+<span class="n">environ</span><span class="p">[</span><span class="s1">&#39;REQUEST_METHOD&#39;</span><span class="p">]</span>    <span class="o">=</span> <span class="s1">&#39;GET&#39;</span>
+<span class="n">environ</span><span class="p">[</span><span class="s1">&#39;PATH_INFO&#39;</span><span class="p">]</span>         <span class="o">=</span> <span class="s1">&#39;/hello&#39;</span>
+<span class="n">environ</span><span class="p">[</span><span class="s1">&#39;SERVER_NAME&#39;</span><span class="p">]</span>       <span class="o">=</span> <span class="s1">&#39;localhost&#39;</span>
+<span class="n">environ</span><span class="p">[</span><span class="s1">&#39;SERVER_PORT&#39;</span><span class="p">]</span>       <span class="o">=</span> <span class="mi">8888</span>
+</code></pre></div>
+
+<ul>
+<li><code>start_response</code> callable which will be called in the web framework</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">start_response</span><span class="p">(</span><span class="n">status</span><span class="p">,</span> <span class="n">response_header</span><span class="p">,</span> <span class="n">exec_info</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    status is the http status code, response_header is the header web framework wants to added</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">pass</span>
+</code></pre></div>
+
+<p>for more detail, please reference: <a href="https://www.python.org/dev/peps/pep-0333/#implementation-application-notes">PEP 333: Python web server gateway interface v1.0</a>  </p>
+<h3>Simple TCP echo server</h3>
+<p>As classic socket programming said, a socket server needs to <code>bind/listen/accept/recv/send/close</code>, a socket client needs to <code>connect/send/recv/close</code>. here is a simple example:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">socket</span>
+
+
+<span class="k">class</span> <span class="nc">SimpleTcpServer</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="n">address_family</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span>
+    <span class="n">socket_type</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span>
+    <span class="n">request_queue_size</span> <span class="o">=</span> <span class="mi">1024</span>
+
+    <span class="k">def</span> <span class="nf">__init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_address</span><span class="p">):</span>
+        <span class="c1"># Create a listening socket</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">listen_socket</span> <span class="o">=</span> <span class="n">listen_socket</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">address_family</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">socket_type</span>
+        <span class="p">)</span>
+        <span class="c1"># Allow to reuse the same address</span>
+        <span class="n">listen_socket</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">SOL_SOCKET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SO_REUSEADDR</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># Bind</span>
+        <span class="n">listen_socket</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">server_address</span><span class="p">)</span>
+        <span class="c1"># Activate</span>
+        <span class="n">listen_socket</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request_queue_size</span><span class="p">)</span>
+        <span class="c1"># Get server host name and port</span>
+        <span class="n">host</span><span class="p">,</span> <span class="n">port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">listen_socket</span><span class="o">.</span><span class="n">getsockname</span><span class="p">()[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">server_name</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">getfqdn</span><span class="p">(</span><span class="n">host</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">server_port</span> <span class="o">=</span> <span class="n">port</span>
+
+    <span class="k">def</span> <span class="nf">server_forever</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="p">,</span> <span class="n">client_address</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">listen_socket</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">handle_one_request</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">handle_one_request</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">request_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">1024</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="o">.</span><span class="n">sendall</span><span class="p">(</span><span class="n">request_data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</code></pre></div>
+
+<h3>A simple WSGI Server</h3>
+<p>The simple WSGI server will listen on a port, waiting for an incoming connection to accept, for each connection, WSGI server will invoke the web framework process(which is the main entrance implemented in the web framework) the request and wait until the web framework finish processing it and return the result to the client. here is a simple example:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">io</span>
+<span class="kn">import</span> <span class="nn">socket</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+
+<span class="k">class</span> <span class="nc">WSGIServer</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+
+    <span class="n">address_family</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span>
+    <span class="n">socket_type</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span>
+    <span class="n">request_queue_size</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_address</span><span class="p">):</span>
+        <span class="c1"># Create a listening socket</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">listen_socket</span> <span class="o">=</span> <span class="n">listen_socket</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">address_family</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">socket_type</span>
+        <span class="p">)</span>
+        <span class="c1"># Allow to reuse the same address</span>
+        <span class="n">listen_socket</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">SOL_SOCKET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SO_REUSEADDR</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># Bind</span>
+        <span class="n">listen_socket</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">server_address</span><span class="p">)</span>
+        <span class="c1"># Activate</span>
+        <span class="n">listen_socket</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request_queue_size</span><span class="p">)</span>
+        <span class="c1"># Get server host name and port</span>
+        <span class="n">host</span><span class="p">,</span> <span class="n">port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">listen_socket</span><span class="o">.</span><span class="n">getsockname</span><span class="p">()[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">server_name</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">getfqdn</span><span class="p">(</span><span class="n">host</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">server_port</span> <span class="o">=</span> <span class="n">port</span>
+        <span class="c1"># Return headers set by Web framework/Web application</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">headers_set</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">def</span> <span class="nf">set_app</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">application</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">application</span> <span class="o">=</span> <span class="n">application</span>
+
+    <span class="k">def</span> <span class="nf">serve_forever</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">listen_socket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">listen_socket</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="c1"># New client connection</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="p">,</span> <span class="n">client_address</span> <span class="o">=</span> <span class="n">listen_socket</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
+            <span class="c1"># Handle one request and close the client connection. Then</span>
+            <span class="c1"># loop over to wait for another client connection</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">handle_one_request</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">handle_one_request</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">request_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">1024</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">request_data</span> <span class="o">=</span> <span class="n">request_data</span> <span class="o">=</span> <span class="n">request_data</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+        <span class="c1"># Print formatted request data a la &#39;curl -v&#39;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s1">&#39;&lt; </span><span class="si">{</span><span class="n">line</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">request_data</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
+        <span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">parse_request</span><span class="p">(</span><span class="n">request_data</span><span class="p">)</span>
+
+        <span class="c1"># Construct environment dictionary using request data</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_environ</span><span class="p">()</span>
+
+        <span class="c1"># It&#39;s time to call our application callable and get</span>
+        <span class="c1"># back a result that will become HTTP response body</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">application</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">start_response</span><span class="p">)</span>
+
+        <span class="c1"># Construct a response and send it back to the client</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">finish_response</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">parse_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">):</span>
+        <span class="n">request_line</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">request_line</span> <span class="o">=</span> <span class="n">request_line</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\r\n</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="c1"># Break down the request line into components</span>
+        <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request_method</span><span class="p">,</span>  <span class="c1"># GET</span>
+         <span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>            <span class="c1"># /hello</span>
+         <span class="bp">self</span><span class="o">.</span><span class="n">request_version</span>  <span class="c1"># HTTP/1.1</span>
+         <span class="p">)</span> <span class="o">=</span> <span class="n">request_line</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">get_environ</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># The following code snippet does not follow PEP8 conventions</span>
+        <span class="c1"># but it&#39;s formatted the way it is for demonstration purposes</span>
+        <span class="c1"># to emphasize the required variables and their values</span>
+        <span class="c1">#</span>
+        <span class="c1"># Required WSGI variables</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.version&#39;</span><span class="p">]</span>      <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.url_scheme&#39;</span><span class="p">]</span>   <span class="o">=</span> <span class="s1">&#39;http&#39;</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.input&#39;</span><span class="p">]</span>        <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request_data</span><span class="p">)</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.errors&#39;</span><span class="p">]</span>       <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">stderr</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.multithread&#39;</span><span class="p">]</span>  <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.multiprocess&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.run_once&#39;</span><span class="p">]</span>     <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1"># Required CGI variables</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;REQUEST_METHOD&#39;</span><span class="p">]</span>    <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request_method</span>    <span class="c1"># GET</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;PATH_INFO&#39;</span><span class="p">]</span>         <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">path</span>              <span class="c1"># /hello</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;SERVER_NAME&#39;</span><span class="p">]</span>       <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_name</span>       <span class="c1"># localhost</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;SERVER_PORT&#39;</span><span class="p">]</span>       <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">server_port</span><span class="p">)</span>  <span class="c1"># 8888</span>
+        <span class="k">return</span> <span class="n">env</span>
+
+    <span class="k">def</span> <span class="nf">start_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">status</span><span class="p">,</span> <span class="n">response_headers</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># Add necessary server headers</span>
+        <span class="n">server_headers</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="s1">&#39;Date&#39;</span><span class="p">,</span> <span class="s1">&#39;Mon, 15 Jul 2019 5:54:48 GMT&#39;</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;Server&#39;</span><span class="p">,</span> <span class="s1">&#39;WSGIServer 0.2&#39;</span><span class="p">),</span>
+        <span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">headers_set</span> <span class="o">=</span> <span class="p">[</span><span class="n">status</span><span class="p">,</span> <span class="n">response_headers</span> <span class="o">+</span> <span class="n">server_headers</span><span class="p">]</span>
+        <span class="c1"># To adhere to WSGI specification the start_response must return</span>
+        <span class="c1"># a &#39;write&#39; callable. We simplicity&#39;s sake we&#39;ll ignore that detail</span>
+        <span class="c1"># for now.</span>
+        <span class="c1"># return self.finish_response</span>
+
+    <span class="k">def</span> <span class="nf">finish_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">status</span><span class="p">,</span> <span class="n">response_headers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">headers_set</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;HTTP/1.1 </span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="se">\r\n</span><span class="s1">&#39;</span>
+            <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">response_headers</span><span class="p">:</span>
+                <span class="n">response</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="si">{0}</span><span class="s1">: </span><span class="si">{1}</span><span class="se">\r\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">header</span><span class="p">)</span>
+            <span class="n">response</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="se">\r\n</span><span class="s1">&#39;</span>
+            <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
+                <span class="n">response</span> <span class="o">+=</span> <span class="n">data</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+            <span class="c1"># Print formatted response data a la &#39;curl -v&#39;</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s1">&#39;&gt; </span><span class="si">{</span><span class="n">line</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
+            <span class="p">))</span>
+            <span class="n">response_bytes</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="o">.</span><span class="n">sendall</span><span class="p">(</span><span class="n">response_bytes</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</code></pre></div>
+
+<h3>Concurrent with <code>multiprocessing</code></h3>
+<p>The upper WSGI server can process a request at a time, cuz it is a single process and will block in the while loop, as the following code shows:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">serve_forever</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">listen_socket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">listen_socket</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="c1"># New client connection</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="p">,</span> <span class="n">client_address</span> <span class="o">=</span> <span class="n">listen_socket</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
+        <span class="c1"># Handle one request and close the client connection. Then</span>
+        <span class="c1"># loop over to wait for another client connection</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">handle_one_request</span><span class="p">()</span>
+</code></pre></div>
+
+<p><code>handle_one_request</code> will block the while loop while processing the current connection. the time spent on blocking depends on your web application’s corresponding method’s processing speed.</p>
+<p>if the first connection didn’t finish, the second connection will be blocked by the first one. how can we let the WSGI server handle multiple connections at the same time? the answer is multi-processing.</p>
+<p>here is an example of a multi-processing version, which will fork a new Python process for each incoming connection.</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">WSGIServer</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+
+    <span class="n">address_family</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span>
+    <span class="n">socket_type</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span>
+    <span class="n">request_queue_size</span> <span class="o">=</span> <span class="mi">1024</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">server_address</span><span class="p">):</span>
+        <span class="c1"># Create a listening socket</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">listen_socket</span> <span class="o">=</span> <span class="n">listen_socket</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">address_family</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">socket_type</span>
+        <span class="p">)</span>
+        <span class="c1"># Allow to reuse the same address</span>
+        <span class="n">listen_socket</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">SOL_SOCKET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SO_REUSEADDR</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># Bind</span>
+        <span class="n">listen_socket</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">server_address</span><span class="p">)</span>
+        <span class="c1"># Activate</span>
+        <span class="n">listen_socket</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request_queue_size</span><span class="p">)</span>
+        <span class="c1"># Get server host name and port</span>
+        <span class="n">host</span><span class="p">,</span> <span class="n">port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">listen_socket</span><span class="o">.</span><span class="n">getsockname</span><span class="p">()[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">server_name</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">getfqdn</span><span class="p">(</span><span class="n">host</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">server_port</span> <span class="o">=</span> <span class="n">port</span>
+        <span class="c1"># Return headers set by Web framework/Web application</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">headers_set</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">def</span> <span class="nf">__reap_children</span><span class="p">(</span><span class="n">selflili</span><span class="p">,</span> <span class="n">signum</span><span class="p">,</span> <span class="n">frame</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        collect zombie children</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># wait for all children, do not block</span>
+                <span class="n">pid</span><span class="p">,</span> <span class="n">status</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">waitpid</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">WNOHANG</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">pid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># no more zombies</span>
+                    <span class="k">break</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="c1"># usally this would be OSError exception</span>
+                <span class="c1"># with errno attribute set to errno.ECHILD</span>
+                <span class="c1"># which means there are no more children</span>
+                <span class="k">break</span>
+
+    <span class="k">def</span> <span class="nf">set_app</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">application</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">application</span> <span class="o">=</span> <span class="n">application</span>
+
+    <span class="k">def</span> <span class="nf">serve_forever</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">signal</span><span class="o">.</span><span class="n">signal</span><span class="p">(</span><span class="n">signal</span><span class="o">.</span><span class="n">SIGCHLD</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">__reap_children</span><span class="p">)</span>
+        <span class="n">listen_socket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">listen_socket</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="c1"># New client connection</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="p">,</span> <span class="n">client_address</span> <span class="o">=</span> <span class="n">listen_socket</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">IOError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">code</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span>
+                <span class="k">if</span> <span class="n">code</span> <span class="o">==</span> <span class="n">errno</span><span class="o">.</span><span class="n">EINR</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span>
+            <span class="n">pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">fork</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">pid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># child</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">listen_socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">handle_one_request</span><span class="p">()</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">_exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># parent</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+
+    <span class="k">def</span> <span class="nf">handle_one_request</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">request_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">1024</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">request_data</span> <span class="o">=</span> <span class="n">request_data</span> <span class="o">=</span> <span class="n">request_data</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+        <span class="c1"># Print formatted request data a la &#39;curl -v&#39;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s1">&#39;&lt; </span><span class="si">{</span><span class="n">line</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">request_data</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
+        <span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">parse_request</span><span class="p">(</span><span class="n">request_data</span><span class="p">)</span>
+
+        <span class="c1"># Construct environment dictionary using request data</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_environ</span><span class="p">()</span>
+
+        <span class="c1"># It&#39;s time to call our application callable and get</span>
+        <span class="c1"># back a result that will become HTTP response body</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">application</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">start_response</span><span class="p">)</span>
+
+        <span class="c1"># Construct a response and send it back to the client</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">finish_response</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">parse_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">):</span>
+        <span class="n">request_line</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">request_line</span> <span class="o">=</span> <span class="n">request_line</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\r\n</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="c1"># Break down the request line into components</span>
+        <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request_method</span><span class="p">,</span>  <span class="c1"># GET</span>
+         <span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>            <span class="c1"># /hello</span>
+         <span class="bp">self</span><span class="o">.</span><span class="n">request_version</span>  <span class="c1"># HTTP/1.1</span>
+         <span class="p">)</span> <span class="o">=</span> <span class="n">request_line</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">get_environ</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># The following code snippet does not follow PEP8 conventions</span>
+        <span class="c1"># but it&#39;s formatted the way it is for demonstration purposes</span>
+        <span class="c1"># to emphasize the required variables and their values</span>
+        <span class="c1">#</span>
+        <span class="c1"># Required WSGI variables</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.version&#39;</span><span class="p">]</span>      <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.url_scheme&#39;</span><span class="p">]</span>   <span class="o">=</span> <span class="s1">&#39;http&#39;</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.input&#39;</span><span class="p">]</span>        <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request_data</span><span class="p">)</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.errors&#39;</span><span class="p">]</span>       <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">stderr</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.multithread&#39;</span><span class="p">]</span>  <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.multiprocess&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;wsgi.run_once&#39;</span><span class="p">]</span>     <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1"># Required CGI variables</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;REQUEST_METHOD&#39;</span><span class="p">]</span>    <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request_method</span>    <span class="c1"># GET</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;PATH_INFO&#39;</span><span class="p">]</span>         <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">path</span>              <span class="c1"># /hello</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;SERVER_NAME&#39;</span><span class="p">]</span>       <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_name</span>       <span class="c1"># localhost</span>
+        <span class="n">env</span><span class="p">[</span><span class="s1">&#39;SERVER_PORT&#39;</span><span class="p">]</span>       <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">server_port</span><span class="p">)</span>  <span class="c1"># 8888</span>
+        <span class="k">return</span> <span class="n">env</span>
+
+    <span class="k">def</span> <span class="nf">start_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">status</span><span class="p">,</span> <span class="n">response_headers</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># Add necessary server headers</span>
+        <span class="n">server_headers</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="s1">&#39;Date&#39;</span><span class="p">,</span> <span class="s1">&#39;Mon, 15 Jul 2019 5:54:48 GMT&#39;</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;Server&#39;</span><span class="p">,</span> <span class="s1">&#39;WSGIServer 0.2&#39;</span><span class="p">),</span>
+        <span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">headers_set</span> <span class="o">=</span> <span class="p">[</span><span class="n">status</span><span class="p">,</span> <span class="n">response_headers</span> <span class="o">+</span> <span class="n">server_headers</span><span class="p">]</span>
+        <span class="c1"># To adhere to WSGI specification the start_response must return</span>
+        <span class="c1"># a &#39;write&#39; callable. We simplicity&#39;s sake we&#39;ll ignore that detail</span>
+        <span class="c1"># for now.</span>
+        <span class="c1"># return self.finish_response</span>
+
+    <span class="k">def</span> <span class="nf">finish_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">status</span><span class="p">,</span> <span class="n">response_headers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">headers_set</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;HTTP/1.1 </span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="se">\r\n</span><span class="s1">&#39;</span>
+            <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">response_headers</span><span class="p">:</span>
+                <span class="n">response</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="si">{0}</span><span class="s1">: </span><span class="si">{1}</span><span class="se">\r\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">header</span><span class="p">)</span>
+            <span class="n">response</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="se">\r\n</span><span class="s1">&#39;</span>
+            <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
+                <span class="n">response</span> <span class="o">+=</span> <span class="n">data</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
+            <span class="c1"># Print formatted response data a la &#39;curl -v&#39;</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s1">&#39;&gt; </span><span class="si">{</span><span class="n">line</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
+            <span class="p">))</span>
+            <span class="n">response_bytes</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="o">.</span><span class="n">sendall</span><span class="p">(</span><span class="n">response_bytes</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">client_connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</code></pre></div>
+
+<h3>Concurrent with Linux's Non-Blocking I/O</h3>
+<p>The multi-processing version still has problems, when there are massive connections, the server will create massive processes for each connection. this will exhaust the server resources, and also process-switching is expensive. To achieve that, you will think of using a process pool.</p>
+<p>But let’s think from another side, the server mainly handles I/O tasks, i.e. waiting for the socket to be readable, reading the data and processing it, and writing to the socket. for this kind of task, we use Non-Blocking I/O.</p>
+<p>Suppose you’re a web server. Every time you accept a connection with the accept system call (here’s the man page), you get a new file descriptor representing that connection.</p>
+<p>If you’re a web server, you might have thousands of connections open at the same time. You need to know when people send you new data on those connections, so you can process and respond to them.</p>
+<p>You could have a loop that does:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">open_connections</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">has_new_input</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+        <span class="n">process_input</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+</code></pre></div>
+
+<p>The problem with this is that it can waste a lot of CPU time. Instead of spending all CPU time asking “Are there updates now? How about now? How about now? How about now?“, instead we’d rather just ask the Linux kernel “Hey, here are 100 file descriptors. Tell me when one of them is updated!“.</p>
+<p>The 3 system calls that let you ask Linux to monitor lots of file descriptors are <code>poll, epoll and select</code>. Let’s start with <code>poll</code> and <code>select</code> because that’s where the chapter started.</p>
+<p>I am not gonna talk about the details between <code>select/poll/epoll</code>, you can read this post for more: <a href="https://jvns.ca/blog/2017/06/03/async-io-on-linux--select--poll--and-epoll/">Asyncio on Linux select/poll/epoll</a>.</p>
+<p>Python’s select module has support for Linux’s <code>select/poll/epoll</code>, let’s use select rewrite our WSGI server:
+we use the following code tell Operating System that gives the readable and writable file descriptors when possible:</p>
+<div class="highlight"><pre><span></span><code><span class="n">readables</span><span class="p">,</span> <span class="n">writables</span><span class="p">,</span> <span class="n">exceptions</span> <span class="o">=</span> <span class="n">select</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">rlist</span><span class="p">,</span> <span class="n">wlist</span><span class="p">,</span> <span class="n">elist</span><span class="p">)</span>
+</code></pre></div>
+
+<p>and then we loop the <code>readables</code>, if it is a <code>listen_socket</code>, we accept it. if it is a socket with income data, we read it.</p>
+<h3>Summary</h3>
+<p>Let’s benchmark our WSGI server with the following web application, also against Gunicorn:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">Flask</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s1">&#39;/hello&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">hello_world</span><span class="p">():</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.2</span><span class="p">)</span>  <span class="c1"># simulate that your bussiness logic will take 200 ms</span>
+    <span class="k">return</span> <span class="s1">&#39;Hello World&#39;</span>
+</code></pre></div>
+
+<p>to benchmark, we use <code>wrk</code> as follows:</p>
+<div class="highlight"><pre><span></span><code>wrk<span class="w"> </span>-c<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-d<span class="w"> </span><span class="m">60</span><span class="w"> </span>-t<span class="w"> </span><span class="m">8</span><span class="w"> </span>http://localhost:8888/hello
+</code></pre></div>
+
+<p>Gunicorn config:</p>
+<div class="highlight"><pre><span></span><code>gunicorn<span class="w"> </span>-w<span class="w"> </span><span class="m">8</span><span class="w"> </span>flask_hello:app
+</code></pre></div>
+
+<p>Here is the result for multi-processing version:</p>
+<div class="highlight"><pre><span></span><code><span class="m">09</span>:00<span class="w"> </span>$<span class="w"> </span>wrk<span class="w"> </span>-c<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-d<span class="w"> </span><span class="m">60</span><span class="w"> </span>-t<span class="w"> </span><span class="m">8</span><span class="w"> </span>http://localhost:8888/hello
+Running<span class="w"> </span>1m<span class="w"> </span><span class="nb">test</span><span class="w"> </span>@<span class="w"> </span>http://localhost:8888/hello
+<span class="w">  </span><span class="m">8</span><span class="w"> </span>threads<span class="w"> </span>and<span class="w"> </span><span class="m">1000</span><span class="w"> </span>connections
+<span class="w">  </span>Thread<span class="w"> </span>Stats<span class="w">   </span>Avg<span class="w">      </span>Stdev<span class="w">     </span>Max<span class="w">   </span>+/-<span class="w"> </span>Stdev
+<span class="w">    </span>Latency<span class="w">   </span><span class="m">202</span>.47ms<span class="w">  </span><span class="m">144</span>.58ms<span class="w">   </span><span class="m">1</span>.99s<span class="w">    </span><span class="m">94</span>.69%
+<span class="w">    </span>Req/Sec<span class="w">    </span><span class="m">92</span>.84<span class="w">     </span><span class="m">40</span>.03<span class="w">   </span><span class="m">282</span>.00<span class="w">     </span><span class="m">66</span>.11%
+<span class="w">  </span><span class="m">44396</span><span class="w"> </span>requests<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">1</span>.00m,<span class="w"> </span><span class="m">6</span>.35MB<span class="w"> </span><span class="nb">read</span>
+<span class="w">  </span>Socket<span class="w"> </span>errors:<span class="w"> </span>connect<span class="w"> </span><span class="m">0</span>,<span class="w"> </span><span class="nb">read</span><span class="w"> </span><span class="m">44536</span>,<span class="w"> </span>write<span class="w"> </span><span class="m">437</span>,<span class="w"> </span>timeout<span class="w"> </span><span class="m">214</span>
+Requests/sec:<span class="w">    </span><span class="m">739</span>.07
+Transfer/sec:<span class="w">    </span><span class="m">108</span>.26KB
+</code></pre></div>
+
+<p>Here is the result for Non-Blocking IO version:</p>
+<div class="highlight"><pre><span></span><code><span class="m">09</span>:07<span class="w"> </span>$<span class="w"> </span>wrk<span class="w"> </span>-c<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-d<span class="w"> </span><span class="m">60</span><span class="w"> </span>-t<span class="w"> </span><span class="m">8</span><span class="w"> </span>http://localhost:8888/hello
+Running<span class="w"> </span>1m<span class="w"> </span><span class="nb">test</span><span class="w"> </span>@<span class="w"> </span>http://localhost:8888/hello
+<span class="w">  </span><span class="m">8</span><span class="w"> </span>threads<span class="w"> </span>and<span class="w"> </span><span class="m">1000</span><span class="w"> </span>connections
+<span class="w">  </span>Thread<span class="w"> </span>Stats<span class="w">   </span>Avg<span class="w">      </span>Stdev<span class="w">     </span>Max<span class="w">   </span>+/-<span class="w"> </span>Stdev
+<span class="w">    </span>Latency<span class="w">   </span><span class="m">139</span>.15ms<span class="w">   </span><span class="m">49</span>.91ms<span class="w">   </span><span class="m">1</span>.91s<span class="w">    </span><span class="m">77</span>.01%
+<span class="w">    </span>Req/Sec<span class="w">   </span><span class="m">519</span>.52<span class="w">    </span><span class="m">211</span>.03<span class="w">     </span><span class="m">1</span>.42k<span class="w">    </span><span class="m">73</span>.73%
+<span class="w">  </span><span class="m">247992</span><span class="w"> </span>requests<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">1</span>.00m,<span class="w"> </span><span class="m">35</span>.48MB<span class="w"> </span><span class="nb">read</span>
+<span class="w">  </span>Socket<span class="w"> </span>errors:<span class="w"> </span>connect<span class="w"> </span><span class="m">0</span>,<span class="w"> </span><span class="nb">read</span><span class="w"> </span><span class="m">38</span>,<span class="w"> </span>write<span class="w"> </span><span class="m">0</span>,<span class="w"> </span>timeout<span class="w"> </span><span class="m">417</span>
+Requests/sec:<span class="w">   </span><span class="m">4128</span>.61
+Transfer/sec:<span class="w">    </span><span class="m">604</span>.78KB
+</code></pre></div>
+
+<p>Here is the result with Gunicorn multi-processing version:</p>
+<div class="highlight"><pre><span></span><code><span class="m">09</span>:03<span class="w"> </span>$<span class="w"> </span>wrk<span class="w"> </span>-c<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-d<span class="w"> </span><span class="m">60</span><span class="w"> </span>-t<span class="w"> </span><span class="m">8</span><span class="w"> </span>http://localhost:8000/hello
+Running<span class="w"> </span>1m<span class="w"> </span><span class="nb">test</span><span class="w"> </span>@<span class="w"> </span>http://localhost:8000/hello
+<span class="w">  </span><span class="m">8</span><span class="w"> </span>threads<span class="w"> </span>and<span class="w"> </span><span class="m">1000</span><span class="w"> </span>connections
+<span class="w">  </span>Thread<span class="w"> </span>Stats<span class="w">   </span>Avg<span class="w">      </span>Stdev<span class="w">     </span>Max<span class="w">   </span>+/-<span class="w"> </span>Stdev
+<span class="w">    </span>Latency<span class="w">    </span><span class="m">43</span>.78ms<span class="w">   </span><span class="m">77</span>.65ms<span class="w">   </span><span class="m">1</span>.97s<span class="w">    </span><span class="m">97</span>.56%
+<span class="w">    </span>Req/Sec<span class="w">   </span><span class="m">472</span>.75<span class="w">    </span><span class="m">350</span>.11<span class="w">     </span><span class="m">2</span>.76k<span class="w">    </span><span class="m">81</span>.24%
+<span class="w">  </span><span class="m">217149</span><span class="w"> </span>requests<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">1</span>.00m,<span class="w"> </span><span class="m">35</span>.41MB<span class="w"> </span><span class="nb">read</span>
+<span class="w">  </span>Socket<span class="w"> </span>errors:<span class="w"> </span>connect<span class="w"> </span><span class="m">0</span>,<span class="w"> </span><span class="nb">read</span><span class="w"> </span><span class="m">78</span>,<span class="w"> </span>write<span class="w"> </span><span class="m">147</span>,<span class="w"> </span>timeout<span class="w"> </span><span class="m">94</span>
+Requests/sec:<span class="w">   </span><span class="m">3613</span>.30
+Transfer/sec:<span class="w">    </span><span class="m">603</span>.39KB
+</code></pre></div>
+
+<p>here is the result of my Linux machine:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: center;">Signle Process</th>
+<th>Multi-Process</th>
+<th>Non-Blocking I/O</th>
+<th>Gunicorn</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>QPS</td>
+<td style="text-align: center;">todo</td>
+<td>739</td>
+<td>4128</td>
+<td>3613</td>
+</tr>
+</tbody>
+</table>
+<p>And found an interesting thing, Non-Blocking IO will use one process but also can support high qps, at the same time, it takes less CPU than Gunicorn pre-fork model.</p>
+<h3>Reference</h3>
+<p><a href="https://www.python.org/dev/peps/pep-0333/#implementation-application-notes">PEP 333: Python web server gateway interface v1.0</a><br>
+<a href="https://ruslanspivak.com/lsbaws-part2/">Let's build a web server</a><br>
+<a href="https://jvns.ca/blog/2017/06/03/async-io-on-linux--select--poll--and-epoll/">Async io on Linux select/poll/epoll</a>  </p>
+    </article>
+    <section class="post-nav">
+        <div id="left-page">
+            <div id="left-link">
+            </div>
+        </div>
+        <div id="right-page">
+            <div id="right-link">
+                <a href="/gunicorn-an-inside-view-of-it.html">Gunicorn, an inside view of it </a>
+                <div id="right-arrow"><i class="fa fa-chevron-circle-right"></i></div>
+            </div>
+        </div>
+    </section>
+    <div>
+        <script src="https://giscus.app/client.js" data-repo="minyakonga/minyakonga.github.io"
+            data-repo-id="MDEwOlJlcG9zaXRvcnkyMTAzMDc1NTc=" data-category="General"
+            data-category-id="DIC_kwDODIkJ5c4CUaQB" data-mapping="pathname" data-strict="0" data-reactions-enabled="1"
+            data-emit-metadata="0" data-input-position="bottom" data-theme="light" data-lang="en"
+            crossorigin="anonymous" async>
+            </script>
+    </div>
+</main>
+    <footer>
+        <h6>
+            Rendered by <a href="http://getpelican.com/">Pelican</a> &nbsp;&bull;&nbsp; Theme by <a
+                href="https://github.com/aleylara/Peli-Kiera">Peli-Kiera</a> &nbsp;&bull;&nbsp; Copyright
+                &copy &nbsp;&#8209;&nbsp; minyakonga         </h6>
+    </footer>
+</div>
+</body>
+</html>
