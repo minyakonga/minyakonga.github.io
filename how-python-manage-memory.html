@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>夏嘉莫察瓦绒 - How Python manage memory</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css"/>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css"/>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto+Slab|Ruda"/>
+        <link rel="stylesheet" type="text/css" href="/theme/css/main.css"/>
+
+</head>
+<body>
+<style>.github-corner:hover .octo-arm {
+    animation: octocat-wave 560ms ease-in-out
+}
+@keyframes octocat-wave {
+    0%, 100% {
+        transform: rotate(0)
+    }
+    20%, 60% {
+        transform: rotate(-25deg)
+    }
+    40%, 80% {
+        transform: rotate(10deg)
+    }
+}
+@media (max-width: 500px) {
+    .github-corner:hover .octo-arm {
+        animation: none
+    }
+
+    .github-corner .octo-arm {
+        animation: octocat-wave 560ms ease-in-out
+    }
+}</style><div id="container">
+    <header>
+        <h1><a href="/">夏嘉莫察瓦绒</a></h1>
+            <ul class="social-media">
+                    <li><a href="https://twitter.com/minyakonga"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="https://github.com/csrgxtu"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="minyakonga@gmail.com"><i class="fab fa-email fa-lg" aria-hidden="true"></i></a></li>
+            </ul>
+        <p><em>余生北国，虽闻飞鱼之名，竟不知其为何物...</em></p>
+    </header>
+    <nav>
+        <ul>
+                    <li><a                         class="active" href="/category/python.html"> Python </a></li>
+                    <li><a href="/category/readingnotes.html"> ReadingNotes </a></li>
+                    <li><a href="/category/tool.html"> tool </a></li>
+        </ul>
+    </nav>
+<main>
+    <article>
+        <h1>How Python manage memory</h1>
+        
+        <aside>
+            <ul>
+                <li>
+                    <time datetime="2023-11-08 16:00:00+08:00">Nov 08, 2023</time>
+                </li>
+                <li> min read</li>
+                <li>
+                    Categories:
+                    <a href="/category/python.html"><em>Python</em></a>
+                </li>
+                </li>
+            </ul>
+        </aside>
+        <p>Python is a garbage collection language, means programmers don’t need to care about memory when coding. until we meet high memory usage in production environment and don’t know why our Django web application takes so much memory. to understand why high memory usage in Python web application, need to know following</p>
+<ul>
+<li>CPython’s memory management model</li>
+<li>CPython’s GC</li>
+<li>What can we do to reduce memory usage</li>
+</ul>
+<h2>Python implementations</h2>
+<p>Python have many implementations, like CPython, PyPy, Jython, IronPython etc. each of the implementation have it’s own memory management model and Garbage collector. In most case, we use CPython, which is writen in C language. thus i will only cover CPython’s memory management model and garbage collector.</p>
+<h2>How old version Python manage memory</h2>
+<p>In older version Python, like versions before 2.2, CPython use <code>glibc‘s malloc</code> and <code>free</code> allocate and release memory directly. when u create objects, CPython will call glibc‘s method to allocate memory. when objects no longer needed, it will freeed by glibc. without memory management, this method works but not efficiency. cuz we will constantly create new objects and release them, this will cuz constantly invocation of glibc, thus slow down the Python code. but, this way is simple, and won’t waste memory(only allocate memory when needed and return it back to OS when no need).</p>
+<p>here is the corresponding logic chart for old version CPython</p>
+<p><img alt="old version cpython mem logic" src="https://csrgxtu.github.io/img/old_version_cpython_mem_logic.png"></p>
+<h2>How CPython manage memory now?</h2>
+<p>Request memory when needed works fine, but it needs constantly invocation of glibc methods. like working with threading or processing, we usaully use pool. when need new thread/processing to run, we just create it from pool in our code directly instead of calling <code>multithreading</code> or <code>multiprocessing</code> directly, this sames us time.</p>
+<p>To make memory allocation or release more efficiently, Python starts using a new memory model since 2.4. here is the logic chart for new memory model:</p>
+<p><img alt="py mem model" src="https://csrgxtu.github.io/img/py-mem-model.png"></p>
+<p>CPython has an object allocator that is responsible for allocating memory within the object memory area. This object allocator is where most of the magic happens. It gets called every time a new object needs space allocated or deleted.</p>
+<p>To manage memeory, CPython object allocator use Arenas, Pools, Blocks internally. lets explain them one by one.</p>
+<h4>Arenas</h4>
+<p>The arena is a chunk of 256kB memory allocated on the heap, which provides memory for 64 pools. here is the logic chart of arena:</p>
+<p><img alt="arena" src="https://csrgxtu.github.io/img/arena.png"></p>
+<p>the structure of the Arena objects looks like following:</p>
+<div class="highlight"><pre><span></span><code><span class="k">struct</span><span class="w"> </span><span class="nc">arena_object</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">uintptr_t</span><span class="w"> </span><span class="n">address</span><span class="p">;</span>
+<span class="w">    </span><span class="n">block</span><span class="o">*</span><span class="w"> </span><span class="n">pool_address</span><span class="p">;</span>
+<span class="w">    </span><span class="n">uint</span><span class="w"> </span><span class="n">nfreepools</span><span class="p">;</span>
+<span class="w">    </span><span class="n">uint</span><span class="w"> </span><span class="n">ntotalpools</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">pool_header</span><span class="o">*</span><span class="w"> </span><span class="n">freepools</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">arena_object</span><span class="o">*</span><span class="w"> </span><span class="n">nextarena</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">arena_object</span><span class="o">*</span><span class="w"> </span><span class="n">prevarena</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>All arenas are linked using doubly linked list (the <code>nextarena</code> and <code>prevarena</code> fields), <code>address</code> is the header address of the doubly linked list, it helps to manage them. The <code>ntotalpools</code> and <code>nfreepools</code> are storing information about currently available pools.</p>
+<p>The <code>freepools</code> field points to the linked list of available pools.</p>
+<h4>Pools</h4>
+<p>A collection of blocks of the same size is called a pool. it’s 4kb, same with OS’s default page size. limiting pool with a fixed size of blocks helps with fragmentation.</p>
+<p>the structure of the Pool objects looks like following:</p>
+<div class="highlight"><pre><span></span><code><span class="cm">/* Pool for small blocks. */</span>
+<span class="k">struct</span><span class="w"> </span><span class="nc">pool_header</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">union</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">block</span><span class="w"> </span><span class="o">*</span><span class="n">_padding</span><span class="p">;</span>
+<span class="w">            </span><span class="n">uint</span><span class="w"> </span><span class="n">count</span><span class="p">;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="n">ref</span><span class="p">;</span><span class="w">          </span><span class="cm">/* number of allocated blocks    */</span>
+<span class="w">    </span><span class="n">block</span><span class="w"> </span><span class="o">*</span><span class="n">freeblock</span><span class="p">;</span><span class="w">                   </span><span class="cm">/* pool&#39;s free list head         */</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">pool_header</span><span class="w"> </span><span class="o">*</span><span class="n">nextpool</span><span class="p">;</span><span class="w">       </span><span class="cm">/* next pool of this size class  */</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">pool_header</span><span class="w"> </span><span class="o">*</span><span class="n">prevpool</span><span class="p">;</span><span class="w">       </span><span class="cm">/* previous pool       &quot;&quot;        */</span>
+<span class="w">    </span><span class="n">uint</span><span class="w"> </span><span class="n">arenaindex</span><span class="p">;</span><span class="w">                    </span><span class="cm">/* index into arenas of base adr */</span>
+<span class="w">    </span><span class="n">uint</span><span class="w"> </span><span class="n">szidx</span><span class="p">;</span><span class="w">                         </span><span class="cm">/* block size class index        */</span>
+<span class="w">    </span><span class="n">uint</span><span class="w"> </span><span class="n">nextoffset</span><span class="p">;</span><span class="w">                    </span><span class="cm">/* bytes to virgin block         */</span>
+<span class="w">    </span><span class="n">uint</span><span class="w"> </span><span class="n">maxnextoffset</span><span class="p">;</span><span class="w">                 </span><span class="cm">/* largest valid nextoffset      */</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p>Pools of the same sized blocks are linked together using doubly linked list (the nextpool and prevpool fields). The szidx field keeps the size class index, whereas ref.count keeps the number of used blocks. The arenaindex stores the number of an arena in which Pool was created.</p>
+<p>The freeblock field is described as follows:</p>
+<div class="highlight"><pre><span></span><code><span class="nx">Blocks</span><span class="w"> </span><span class="nx">within</span><span class="w"> </span><span class="nx">pools</span><span class="w"> </span><span class="nx">are</span><span class="w"> </span><span class="nx">again</span><span class="w"> </span><span class="nx">carved</span><span class="w"> </span><span class="nx">out</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nx">needed</span><span class="p">.</span><span class="w">  </span><span class="nx">pool</span><span class="o">-&gt;</span><span class="nx">freeblock</span><span class="w"> </span><span class="nx">points</span><span class="w"> </span><span class="nx">to</span>
+<span class="nx">the</span><span class="w"> </span><span class="nx">start</span><span class="w"> </span><span class="nx">of</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="nx">singly</span><span class="o">-</span><span class="nx">linked</span><span class="w"> </span><span class="nx">list</span><span class="w"> </span><span class="nx">of</span><span class="w"> </span><span class="nx">free</span><span class="w"> </span><span class="nx">blocks</span><span class="w"> </span><span class="nx">within</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">pool</span><span class="p">.</span><span class="w">  </span><span class="nx">When</span><span class="w"> </span><span class="nx">a</span>
+<span class="nx">block</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="nx">freed</span><span class="p">,</span><span class="w"> </span><span class="nx">it</span><span class="err">&#39;</span><span class="nx">s</span><span class="w"> </span><span class="nx">inserted</span><span class="w"> </span><span class="nx">at</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">front</span><span class="w"> </span><span class="nx">of</span><span class="w"> </span><span class="nx">its</span><span class="w"> </span><span class="nx">pool</span><span class="err">&#39;</span><span class="nx">s</span><span class="w"> </span><span class="nx">freeblock</span><span class="w"> </span><span class="nx">list</span><span class="p">.</span><span class="w">  </span><span class="nx">Note</span>
+<span class="nx">that</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">available</span><span class="w"> </span><span class="nx">blocks</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="nx">pool</span><span class="w"> </span><span class="nx">are</span><span class="w"> </span><span class="o">*</span><span class="k">not</span><span class="o">*</span><span class="w"> </span><span class="nx">linked</span><span class="w"> </span><span class="nx">all</span><span class="w"> </span><span class="nx">together</span><span class="w"> </span><span class="nx">when</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="nx">pool</span>
+<span class="k">is</span><span class="w"> </span><span class="nx">initialized</span><span class="p">.</span><span class="w">  </span><span class="nx">Instead</span><span class="w"> </span><span class="nx">only</span><span class="w"> </span><span class="s">&quot;the first two&quot;</span><span class="w"> </span><span class="p">(</span><span class="nx">lowest</span><span class="w"> </span><span class="nx">addresses</span><span class="p">)</span><span class="w"> </span><span class="nx">blocks</span><span class="w"> </span><span class="nx">are</span>
+<span class="nx">set</span><span class="w"> </span><span class="nx">up</span><span class="p">,</span><span class="w"> </span><span class="nx">returning</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">first</span><span class="w"> </span><span class="nx">such</span><span class="w"> </span><span class="nx">block</span><span class="p">,</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="nx">setting</span><span class="w"> </span><span class="nx">pool</span><span class="o">-&gt;</span><span class="nx">freeblock</span><span class="w"> </span><span class="nx">to</span><span class="w"> </span><span class="nx">a</span>
+<span class="nx">one</span><span class="o">-</span><span class="nx">block</span><span class="w"> </span><span class="nx">list</span><span class="w"> </span><span class="nx">holding</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">second</span><span class="w"> </span><span class="nx">such</span><span class="w"> </span><span class="nx">block</span><span class="p">.</span><span class="w">  </span><span class="nx">This</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="nx">consistent</span><span class="w"> </span><span class="nx">with</span><span class="w"> </span><span class="nx">that</span>
+<span class="nx">pymalloc</span><span class="w"> </span><span class="nx">strives</span><span class="w"> </span><span class="nx">at</span><span class="w"> </span><span class="nx">all</span><span class="w"> </span><span class="nx">levels</span><span class="w"> </span><span class="p">(</span><span class="nx">arena</span><span class="p">,</span><span class="w"> </span><span class="nx">pool</span><span class="p">,</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="nx">block</span><span class="p">)</span><span class="w"> </span><span class="nx">never</span><span class="w"> </span><span class="nx">to</span><span class="w"> </span><span class="nx">touch</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="nx">piece</span>
+<span class="nx">of</span><span class="w"> </span><span class="nx">memory</span><span class="w"> </span><span class="nx">until</span><span class="w"> </span><span class="nx">it</span><span class="err">&#39;</span><span class="nx">s</span><span class="w"> </span><span class="nx">actually</span><span class="w"> </span><span class="nx">needed</span><span class="p">.</span>
+
+<span class="nx">So</span><span class="w"> </span><span class="nx">long</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="nx">pool</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">used</span><span class="w"> </span><span class="nx">state</span><span class="p">,</span><span class="w"> </span><span class="nx">we</span><span class="err">&#39;</span><span class="nx">re</span><span class="w"> </span><span class="nx">certain</span><span class="w"> </span><span class="nx">there</span><span class="w"> </span><span class="o">*</span><span class="k">is</span><span class="o">*</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="nx">block</span>
+<span class="nx">available</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="nx">allocating</span><span class="p">,</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="nx">pool</span><span class="o">-&gt;</span><span class="nx">freeblock</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="nx">NULL</span><span class="p">.</span><span class="w">  </span><span class="nx">If</span><span class="w"> </span><span class="nx">pool</span><span class="o">-&gt;</span><span class="nx">freeblock</span>
+<span class="nx">points</span><span class="w"> </span><span class="nx">to</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">end</span><span class="w"> </span><span class="nx">of</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">free</span><span class="w"> </span><span class="nx">list</span><span class="w"> </span><span class="nx">before</span><span class="w"> </span><span class="nx">we</span><span class="err">&#39;</span><span class="nx">ve</span><span class="w"> </span><span class="nx">carved</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">entire</span><span class="w"> </span><span class="nx">pool</span><span class="w"> </span><span class="nx">into</span>
+<span class="nx">blocks</span><span class="p">,</span><span class="w"> </span><span class="nx">that</span><span class="w"> </span><span class="nx">means</span><span class="w"> </span><span class="nx">we</span><span class="w"> </span><span class="nx">simply</span><span class="w"> </span><span class="nx">haven</span><span class="err">&#39;</span><span class="nx">t</span><span class="w"> </span><span class="nx">yet</span><span class="w"> </span><span class="nx">gotten</span><span class="w"> </span><span class="nx">to</span><span class="w"> </span><span class="nx">one</span><span class="w"> </span><span class="nx">of</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">higher</span><span class="o">-</span><span class="nx">address</span>
+<span class="nx">blocks</span><span class="p">.</span><span class="w">  </span><span class="nx">The</span><span class="w"> </span><span class="nx">offset</span><span class="w"> </span><span class="nx">from</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">pool_header</span><span class="w"> </span><span class="nx">to</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">start</span><span class="w"> </span><span class="nx">of</span><span class="w"> </span><span class="s">&quot;the next&quot;</span><span class="w"> </span><span class="nx">virgin</span>
+<span class="nx">block</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="nx">stored</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">pool_header</span><span class="w"> </span><span class="nx">nextoffset</span><span class="w"> </span><span class="nx">member</span><span class="p">,</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">largest</span><span class="w"> </span><span class="nx">value</span>
+<span class="nx">of</span><span class="w"> </span><span class="nx">nextoffset</span><span class="w"> </span><span class="nx">that</span><span class="w"> </span><span class="nx">makes</span><span class="w"> </span><span class="nx">sense</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="nx">stored</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">maxnextoffset</span><span class="w"> </span><span class="nx">member</span><span class="w"> </span><span class="nx">when</span><span class="w"> </span><span class="nx">a</span>
+<span class="nx">pool</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="nx">initialized</span><span class="p">.</span><span class="w">  </span><span class="nx">All</span><span class="w"> </span><span class="nx">the</span><span class="w"> </span><span class="nx">blocks</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="nx">pool</span><span class="w"> </span><span class="nx">have</span><span class="w"> </span><span class="nx">been</span><span class="w"> </span><span class="nx">passed</span><span class="w"> </span><span class="nx">out</span><span class="w"> </span><span class="nx">at</span><span class="w"> </span><span class="nx">least</span>
+<span class="nx">once</span><span class="w"> </span><span class="nx">when</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="nx">only</span><span class="w"> </span><span class="nx">when</span><span class="w"> </span><span class="nx">nextoffset</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="nx">maxnextoffset</span><span class="p">.</span>
+</code></pre></div>
+
+<p>here is the block size index table:</p>
+<table>
+<thead>
+<tr>
+<th>Request in Bytes</th>
+<th>Size of allocated block</th>
+<th>Size class index</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1-8</td>
+<td>8</td>
+<td>0</td>
+</tr>
+<tr>
+<td>9-16</td>
+<td>16</td>
+<td>1</td>
+</tr>
+<tr>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<td>505-512</td>
+<td>512</td>
+<td>63</td>
+</tr>
+</tbody>
+</table>
+<p>Pool have three states:
+* Used, partially used, neither full or empty
+* Full, all pool’s blocks are currently allocated
+* Empty, all pool’s blocks are currently available for allocation</p>
+<p>In order to effiently manage pools, Cpython use an array called usedpools, it stores pointers to pools grouped by class as following image shows:</p>
+<p><img alt="used pools" src="https://rushter.com/static/uploads/img/usedpools.svg"></p>
+<p>Note that pools and blocks are not allocating memory directly, instead, they are using already allocated space from arenas.</p>
+<h4>Blocks</h4>
+<p>Blocks are a chunk of memory of certain size. there are 64 kinds of blocks, as block size index table shows, your <code>int</code> or <code>list</code> will finnaly use these blocks.:</p>
+<table>
+<thead>
+<tr>
+<th>Request in Bytes</th>
+<th>Size of allocated block</th>
+<th>Size class index</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1-8</td>
+<td>8</td>
+<td>0</td>
+</tr>
+<tr>
+<td>9-16</td>
+<td>16</td>
+<td>1</td>
+</tr>
+<tr>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<td>505-512</td>
+<td>512</td>
+<td>63</td>
+</tr>
+</tbody>
+</table>
+<h3>Garbage Collector</h3>
+<p>When you create objects in your code, CPython’s object allocator will allocate blocks of memeory from pool or arena(CPython’s memory manager). when you leave your code, CPython’s garbage collector will free the memory to Python memeory manager.</p>
+<p>For detail, ref post <a href="https://csrgxtu.github.io/2020/02/18/CPython-s-Garbage-Collector/">CPython’s Garbage Collector</a></p>
+<h3>References</h3>
+<p><a href="https://github.com/python/cpython/blob/7d6ddb96b34b94c1cbdf95baa94492c48426404e/Objects/obmalloc.c">Github: CPython’s obmalloc.c</a><br>
+<a href="https://realpython.com/python-memory-management/">Real Python: Python memory management</a><br>
+<a href="https://realpython.com/python-memory-management/">Ruster: Python memory management</a><br>
+<a href="https://www.evanjones.ca/memoryallocator/">Evan Johes: Improving Python’s memory allocator</a><br>
+<a href="https://www.youtube.com/watch?v=HHFCFJSPWrI">EuroPython 2011: Understading Python’s memory model: Mutability and Methods</a> </p>
+    </article>
+    <section class="post-nav">
+        <div id="left-page">
+            <div id="left-link">
+            </div>
+        </div>
+        <div id="right-page">
+            <div id="right-link">
+                <a href="/reading-notes-rework-by-jason-fried-and-david-heinemeier-hansson.html">Reading Notes -- Rework By Jason Fried and David Heinemeier Hansson </a>
+                <div id="right-arrow"><i class="fa fa-chevron-circle-right"></i></div>
+            </div>
+        </div>
+    </section>
+    <div>
+        <script src="https://giscus.app/client.js" data-repo="minyakonga/minyakonga.github.io"
+            data-repo-id="MDEwOlJlcG9zaXRvcnkyMTAzMDc1NTc=" data-category="General"
+            data-category-id="DIC_kwDODIkJ5c4CUaQB" data-mapping="pathname" data-strict="0" data-reactions-enabled="1"
+            data-emit-metadata="0" data-input-position="bottom" data-theme="light" data-lang="en"
+            crossorigin="anonymous" async>
+            </script>
+    </div>
+</main>
+    <footer>
+        <h6>
+            Rendered by <a href="http://getpelican.com/">Pelican</a> &nbsp;&bull;&nbsp; Theme by <a
+                href="https://github.com/aleylara/Peli-Kiera">Peli-Kiera</a> &nbsp;&bull;&nbsp; Copyright
+                &copy &nbsp;&#8209;&nbsp; minyakonga         </h6>
+    </footer>
+</div>
+</body>
+</html>
