@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>夏嘉莫察瓦绒 - Cpython gabage collection</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css"/>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css"/>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto+Slab|Ruda"/>
+        <link rel="stylesheet" type="text/css" href="/theme/css/main.css"/>
+
+</head>
+<body>
+<style>.github-corner:hover .octo-arm {
+    animation: octocat-wave 560ms ease-in-out
+}
+@keyframes octocat-wave {
+    0%, 100% {
+        transform: rotate(0)
+    }
+    20%, 60% {
+        transform: rotate(-25deg)
+    }
+    40%, 80% {
+        transform: rotate(10deg)
+    }
+}
+@media (max-width: 500px) {
+    .github-corner:hover .octo-arm {
+        animation: none
+    }
+
+    .github-corner .octo-arm {
+        animation: octocat-wave 560ms ease-in-out
+    }
+}</style><div id="container">
+    <header>
+        <h1><a href="/">夏嘉莫察瓦绒</a></h1>
+            <ul class="social-media">
+                    <li><a href="https://twitter.com/minyakonga"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="https://github.com/csrgxtu"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a></li>
+                    <li><a href="minyakonga@gmail.com"><i class="fab fa-email fa-lg" aria-hidden="true"></i></a></li>
+            </ul>
+        <p><em>余生北国，虽闻飞鱼之名，竟不知其为何物...</em></p>
+    </header>
+    <nav>
+        <ul>
+                    <li><a                         class="active" href="/category/python.html"> Python </a></li>
+                    <li><a href="/category/readingnotes.html"> ReadingNotes </a></li>
+                    <li><a href="/category/tool.html"> tool </a></li>
+        </ul>
+    </nav>
+<main>
+    <article>
+        <h1>Cpython gabage collection</h1>
+        
+        <aside>
+            <ul>
+                <li>
+                    <time datetime="2023-11-08 16:00:00+08:00">Nov 08, 2023</time>
+                </li>
+                <li> min read</li>
+                <li>
+                    Categories:
+                    <a href="/category/python.html"><em>Python</em></a>
+                </li>
+                </li>
+            </ul>
+        </aside>
+        <p>As described in <a href="http://localhost:8000/how-python-manage-memory.html">How Python manage memory</a>, we now know how CPython allocate memory for objects, but how CPython reclaim that memory? this post will show you how CPython reclaim memory through Garbage Collector.</p>
+<h2>Reference Count</h2>
+<p>CPython use reference count relaim memory, we know that everything in Python is object, <code>int</code>, <code>str</code>, <code>list</code> or <code>dict</code> etc, which all derived from <code>PyObject</code>, which have following struct defination in C:</p>
+<div class="highlight"><pre><span></span><code><span class="k">typedef</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">_object</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Py_ssize_t</span><span class="w"> </span><span class="n">ob_refcnt</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="nc">_typeobject</span><span class="w"> </span><span class="o">*</span><span class="n">ob_type</span><span class="p">;</span>
+<span class="p">}</span><span class="w"> </span><span class="n">PyObject</span><span class="p">;</span>
+</code></pre></div>
+
+<p>the <code>ob_type</code> field indicated current object type, i.e <code>int</code> or <code>str</code> etc. the <code>ob_refcnt</code> is a number, it will be incremented by 1 in following situations:</p>
+<ul>
+<li>variable assignment</li>
+<li>function argument passing</li>
+<li>appending to a container object</li>
+</ul>
+<p>In Python we can get this reference count easily with <code>sys.getrefcount</code>, here is an example:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="n">foo</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># now list object&#39;s ref count is 1</span>
+<span class="nb">print</span> <span class="n">sys</span><span class="o">.</span><span class="n">getrefcount</span><span class="p">(</span><span class="n">foo</span><span class="p">)</span>  <span class="c1"># will print 2, cuz getrefcount function will increase 1 count to ref count</span>
+</code></pre></div>
+
+<p>when an object’s reference count goes to zero, it will be automatically freed by Python to it’s memory pool. and Python will return memory to operating system only and only if the whole arena memory area are empty. but due to memory fragement, all arenas will in used situation, thus Python will hold lots of memory when it is running.</p>
+<p>Reference count is incredibly simple and efficient, but it cant deal with reference cycles. thus Python have an supplemental algorithm called generation garbage collection.</p>
+<p>The reference counting module is fundamental to Python thus cant be disabled, but generation garbage collection is optional and can be disabled manually like following:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">gc</span>
+
+
+<span class="n">gc</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
+<span class="o">...</span>
+</code></pre></div>
+
+<h2>Reference Cycles</h2>
+<p>A reference cycle occurs when one or more objects referencing each other or itself.
+<img alt="reference cycle" src="https://rushter.com/static/uploads/img/circularref.svg"></p>
+<p>For container objejcts like <code>list, tuppel, dict, class</code> etc, will meet this cycle. here is an example:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">gc</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">ctypes</span>
+
+
+<span class="c1"># disable generation gc first</span>
+<span class="n">gc</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
+
+
+<span class="c1"># objects referencing each other</span>
+<span class="n">object_one</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># refcnt: 1</span>
+<span class="n">object_two</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># refcnt: 2</span>
+
+<span class="n">object_one_addr</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">object_one</span><span class="p">)</span>
+<span class="n">object_two_addr</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">object_two</span><span class="p">)</span>
+
+<span class="n">object_one</span><span class="p">[</span><span class="s1">&#39;object_two&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">object_two</span>  <span class="c1"># refcnt: 2</span>
+<span class="n">object_two</span><span class="p">[</span><span class="s1">&#39;object_one&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">object_one</span>  <span class="c1"># refcnt: 2</span>
+
+<span class="k">del</span> <span class="n">object_one</span><span class="p">,</span> <span class="n">object_two</span>  <span class="c1"># after del, the object are unreachable, but the refcnt is still 1, thus cant be reclamed</span>
+<span class="nb">print</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_long</span><span class="o">.</span><span class="n">from_address</span><span class="p">(</span><span class="n">object_one_addr</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>  <span class="c1"># 1</span>
+<span class="nb">print</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_long</span><span class="o">.</span><span class="n">from_address</span><span class="p">(</span><span class="n">object_two_addr</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>  <span class="c1"># 1</span>
+
+<span class="c1"># object referencing itself</span>
+<span class="n">lst_obj</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># refcnt: 1</span>
+<span class="n">lst_obj_addr</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">lst_obj</span><span class="p">)</span>
+<span class="n">lst_obj</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">lst_obj</span><span class="p">)</span>  <span class="c1"># refcnt: 2</span>
+<span class="k">del</span> <span class="n">lst_obj</span>  <span class="c1"># refcnt: 1, after del, refcnt to object is still 1, thus cant be cleaned</span>
+<span class="nb">print</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_long</span><span class="o">.</span><span class="n">from_address</span><span class="p">(</span><span class="n">lst_obj_addr</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>  <span class="c1"># 1</span>
+</code></pre></div>
+
+<p>We know that Reference Counting only free object when it’s ob_refcnt field is zero. but objects which have reference cycles never goes to zero, thus Reference Counting can’t free it.</p>
+<h2>Generational Garbage Collection</h2>
+<p>To solve reference cycle problems, CPython use Generational Garbage Collection. Generation GC will run periodically(whenever the number of objects gets over the threshhold <code>gc.get_threshhold()</code>.</p>
+<h3>How to detect cycles</h3>
+<p>CPython only focus on container objects, i.e. objects that can contain another object: arrays, dictrionaries, user classes etc. also GC will ignore tupples with only immutable types(int, str).</p>
+<p>For this CPython have two doubly linked list: one of list objects to be scanned, and a tentatively unreachable list.</p>
+<p>1, when gc starts, it has all objects in first list, each object also has an gc_ref field initially equal to ob_refcnt, as following image shows, you can ref code <a href="https://hg.python.org/cpython/file/eafe4007c999/Modules/gcmodule.c#l335">update_refs</a> for more detailed info:</p>
+<p><img alt="cyclic gc 1st generation" src="https://pythoninternal.files.wordpress.com/2014/07/python-cyclic-gc-1-new-page.png"></p>
+<p>2, GC then iterate each objects in first list. for each object, it will decrements by 1 the gc_ref of the objects that current object refering.</p>
+<p><img alt="second generation" src="https://pythoninternal.files.wordpress.com/2014/07/python-cyclic-gc-2-new-page.png"></p>
+<p>3, GC scan again the first list, objects with gc_ref zero are marked as GC_INTENTATIVE_UNREACHABLE and moved to intentative unreachable list, as following image shows:</p>
+<p><img alt="3rd generation" src="https://pythoninternal.files.wordpress.com/2014/07/python-cyclic-gc-3-new-page.png"></p>
+<p>4, GC scan first list again, cuz link1’s gc_ref is 1, it is marked as GC_REACHABLE.</p>
+<p><img alt="" src="https://pythoninternal.files.wordpress.com/2014/07/python-cyclic-gc-4-new-page.png"></p>
+<p>5, When GC encounters rechable objects, it traverse all objects it referencing, mark them GC_REACHABEL too and move them into first list.</p>
+<p><img alt="" src="https://pythoninternal.files.wordpress.com/2014/07/python-cyclic-gc-5-new-page.png"></p>
+<p>6, When all objects are scaned, the container objects in tentively unreachable list can be garbage collected.</p>
+<h3>Optimization #1: limiting the time for each collection</h3>
+<p>The most objects die yong, for example, most objects we created will not be used later, thus can be collected shortly, these are yong objects. on the other side, the older objects are unlikely collected .</p>
+<p>CPython defined 3 generations of objects from 0 to 2. every new object starts at generation 0, when it survives one GC round, it moves to next generation. the older generation, the longer it lives, thus unlikely collected.</p>
+<h2>Summary</h2>
+<p>CPython use reference counting mainly, will use generational garbage collection as an suplenmental method. to make your code efficient, plz dont write cyclic reference, this will cost time when generational garbage collector runs.</p>
+<h2>References</h2>
+<p><a href="http://arctrix.com/nas/python/gc/">Portable Garbage Collection</a><br>
+<a href="https://www.youtube.com/watch?v=CLW5Lyc1FN8&amp;t=1139s">PyCon 2019: Time to take out rubbish: garbage collector by Pablo Galindo Salgado</a><br>
+<a href="https://www.youtube.com/watch?v=F6u5rhUQ6dU">PyCon 2016: Memory management in Python by Nina Zakharenko</a><br>
+<a href="https://pythoninternal.wordpress.com/2014/08/04/the-garbage-collector/">The Garbage Collector by Lpoulain</a><br>
+<a href="https://rushter.com/blog/python-garbage-collector/">Garbage collection in Python: things you need to know by Aertem Golubin</a> </p>
+    </article>
+    <section class="post-nav">
+        <div id="left-page">
+            <div id="left-link">
+            </div>
+        </div>
+        <div id="right-page">
+            <div id="right-link">
+                <a href="/how-python-manage-memory.html">How Python manage memory </a>
+                <div id="right-arrow"><i class="fa fa-chevron-circle-right"></i></div>
+            </div>
+        </div>
+    </section>
+    <div>
+        <script src="https://giscus.app/client.js" data-repo="minyakonga/minyakonga.github.io"
+            data-repo-id="MDEwOlJlcG9zaXRvcnkyMTAzMDc1NTc=" data-category="General"
+            data-category-id="DIC_kwDODIkJ5c4CUaQB" data-mapping="pathname" data-strict="0" data-reactions-enabled="1"
+            data-emit-metadata="0" data-input-position="bottom" data-theme="light" data-lang="en"
+            crossorigin="anonymous" async>
+            </script>
+    </div>
+</main>
+    <footer>
+        <h6>
+            Rendered by <a href="http://getpelican.com/">Pelican</a> &nbsp;&bull;&nbsp; Theme by <a
+                href="https://github.com/aleylara/Peli-Kiera">Peli-Kiera</a> &nbsp;&bull;&nbsp; Copyright
+                &copy &nbsp;&#8209;&nbsp; minyakonga         </h6>
+    </footer>
+</div>
+</body>
+</html>
